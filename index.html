@@ -277,24 +277,24 @@
             padding: 0;
             background-color: var(--beos-bg-primary);
             position: relative;
-            overflow: hidden; /* Important: content area itself handles overflow of its children */
-            display: flex; /* Ensure it behaves as a flex container for its children */
-            flex-direction: column; /* Stack canvas and container vertically */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         #weatherAppWindow #weather-effects-canvas-app {
             position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; /* Will be sized by JS to parent on display */
+            width: 100%; height: 100%;
             z-index: 0; pointer-events: none;
         }
         #weatherAppWindow .weather-app-container {
-            width: 100%; height: 100%; /* Fill the content area */
+            width: 100%; height: 100%;
             padding: calc(var(--padding-m) * 1.5);
             box-sizing: border-box;
-            overflow-y: auto; /* This container scrolls its content */
-            position: relative; /* For z-index context */
-            z-index: 1; /* Above the canvas */
-            display: flex; /* Make it a flex container */
-            flex-direction: column; /* Stack its children */
+            overflow-y: auto;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
         }
         #weatherAppWindow header { text-align: center; margin-bottom: calc(var(--padding-m) * 2); flex-shrink: 0; }
         #weatherAppWindow header h1 { font-size: 1.5em; font-weight: bold; color: var(--beos-text-primary); margin-bottom: calc(var(--padding-m) * 0.3); }
@@ -310,8 +310,7 @@
         #weatherAppWindow .weather-skeleton-icon { width: 3.5em; height: 3.5em; border-radius: 0; margin: 0 auto; }
 
         #weatherAppWindow .weather-top-info-grid { display: grid; grid-template-columns: 1fr; gap: var(--padding-m); margin-bottom: calc(var(--padding-m) * 2); flex-shrink: 0; }
-        #weatherAppWindow .weather-current-weather-section,
-        #weatherAppWindow .weather-aqi-section {
+        #weatherAppWindow .weather-current-weather-section {
             background-color: var(--beos-bg-window);
             border: 1px solid var(--beos-border-shadow);
             border-top: 1px solid var(--beos-border-light); border-left: 1px solid var(--beos-border-light);
@@ -335,10 +334,7 @@
             border: 1px solid var(--beos-border-shadow);
             border-right: 1px solid var(--beos-border-light); border-bottom: 1px solid var(--beos-border-light);
         }
-        #weatherAppWindow .weather-current-weather-section .content-wrapper,
-        #weatherAppWindow .weather-aqi-section .content-wrapper {
-             padding: var(--padding-m);
-        }
+        #weatherAppWindow .weather-current-weather-section .content-wrapper { padding: var(--padding-m); }
         #weatherAppWindow .weather-current-weather-main { display: flex; align-items: center; gap: var(--padding-m); margin-bottom: var(--padding-m); }
         #weatherAppWindow .weather-current-weather-main .icon { font-size: 3.5em; line-height: 1; }
         #weatherAppWindow .weather-current-weather-main .icon.sun { animation: gentleRotateWF 20s linear infinite; }
@@ -369,10 +365,10 @@
             display: flex; flex-direction: column; min-height: 300px;  flex-shrink: 0;
         }
         #weatherAppWindow .weather-weekly-temp-chart-container .content-wrapper {
-             padding: var(--padding-s); flex-grow: 1; position: relative; min-height: 250px; /* Ensure chart has space */
-             display: flex; /* Allow canvas to grow */
+             padding: var(--padding-s); flex-grow: 1; position: relative; min-height: 250px;
+             display: flex;
         }
-        #weatherAppWindow #weatherWeeklyTempChart { max-width: 100%; max-height: 100%;} /* Canvas sizing */
+        #weatherAppWindow #weatherWeeklyTempChart { max-width: 100%; max-height: 100%;}
 
         #weatherAppWindow .weather-forecast-container {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -541,7 +537,7 @@
             max-width: 100%; max-height: 100%; image-rendering: pixelated; image-rendering: crisp-edges;
         }
 
-        /* --- Hard Return Remover App Styles (Copied from above) --- */
+        /* --- Hard Return Remover App Styles --- */
         #hrrAppWindow .beos-window-content-area {
             display: flex; gap: var(--padding-m); overflow: hidden; background-color: var(--beos-bg-window);
         }
@@ -768,21 +764,22 @@
     // --- Global Desktop Manager JS ---
     const globalDesktop = {
         appWindows: {},
-        appStatus: {},
+        appStatus: {}, // { appKey: { initialized: boolean, dataLoaded: boolean (for weather) } }
         highestZ: 1,
         popupTimeout: null,
-        WINDOW_STATES_KEY: 'beosDesktopWindowStates_v3', // Incremented version
+        WINDOW_STATES_KEY: 'beosDesktopWindowStates_v4',
         resizeObserver: null,
 
         init() {
-            // Group app windows
             this.appWindows.weatherAppWindow = document.getElementById("weatherAppWindow");
-            this.appWindows.diaryApp = [
+            this.appWindows.diaryApp = [ /* diary window elements */ ]; // Populated as before
+            this.appWindows.hrrAppWindow = document.getElementById("hrrAppWindow");
+            // Populate diaryApp windows array
+             this.appWindows.diaryApp = [
                 document.getElementById("calendarWindow"), document.getElementById("formWindow"),
                 document.getElementById("listWindow"), document.getElementById("backupWindow"),
                 document.getElementById("clockWindow")
             ];
-            this.appWindows.hrrAppWindow = document.getElementById("hrrAppWindow");
 
 
             this.loadWindowStates();
@@ -794,24 +791,15 @@
                     for (let entry of entries) {
                         const windowEl = entry.target;
                         if (windowEl.offsetParent === null || windowEl.style.display === 'none') continue;
-                        
-                        this.saveWindowState(windowEl.id, {
-                            width: windowEl.style.width,
-                            height: windowEl.style.height
-                        });
-
-                        if (windowEl.id === 'clockWindow' && typeof diaryApp !== 'undefined' && diaryApp.clockCanvas) {
-                            diaryApp.drawClock();
-                        }
-                        if (windowEl.id === 'weatherAppWindow' && typeof weatherApp !== 'undefined') {
-                           if (weatherApp.DOM.weatherEffectsCanvas) {
-                                weatherApp.setupWeatherEffectsCanvas(); // This resizes canvas to parent
-                                if (weatherApp._appState.weatherEffect.currentEffectType) {
-                                   // Restart effect only if canvas size actually changed significantly or first time
-                                   weatherApp.startWeatherEffect(weatherApp._appState.weatherEffect.currentEffectType);
-                                }
+                        this.saveWindowState(windowEl.id, { width: windowEl.style.width, height: windowEl.style.height });
+                        // App-specific resize handlers using requestAnimationFrame
+                        requestAnimationFrame(() => {
+                            if (windowEl.id === 'clockWindow' && typeof diaryApp !== 'undefined' && diaryApp.clockCanvas) diaryApp.drawClock();
+                            if (windowEl.id === 'weatherAppWindow' && typeof weatherApp !== 'undefined' && weatherApp.DOM.weatherEffectsCanvas) {
+                                weatherApp.setupWeatherEffectsCanvas();
+                                if (weatherApp._appState.weatherEffect.currentEffectType) weatherApp.startWeatherEffect(weatherApp._appState.weatherEffect.currentEffectType);
                             }
-                        }
+                        });
                     }
                 });
             }
@@ -824,66 +812,44 @@
             const savedStates = this.getWindowStates();
             Object.keys(savedStates).forEach(windowId => {
                 if (savedStates[windowId].visible) {
-                    let appIdToLaunch = null;
-                    if (windowId === "weatherAppWindow") appIdToLaunch = "weatherAppWindow";
-                    else if (["calendarWindow", "formWindow", "listWindow", "backupWindow", "clockWindow"].includes(windowId)) appIdToLaunch = "diaryApp";
-                    else if (windowId === "hrrAppWindow") appIdToLaunch = "hrrAppWindow";
-                    
-                    if (appIdToLaunch) {
-                         // For multi-window apps, ensure the specific window is shown, not just the app "launched"
+                    const appKey = this.getAppKeyForStatus(windowId);
+                    if (appKey) {
                         const targetWindow = document.getElementById(windowId);
-                        if(targetWindow && targetWindow.style.display === 'none') {
-                            targetWindow.style.display = 'flex';
-                            // Don't bring to front here, z-index already loaded
+                        if (targetWindow && targetWindow.style.display === 'none') {
+                            // Just mark for launch, don't show yet. launchApp will handle display and onShow.
                         }
-                        if (!this.appStatus[this.getAppKeyForStatus(windowId)]) {
-                            this.launchApp(this.getAppKeyForStatus(windowId), false); // false to not steal focus
-                        }
+                        this.launchApp(appKey, false); // Launch app group, don't bring specific window to front yet
                     }
                 }
             });
         },
 
-        getAppKeyForStatus(windowId) {
+        getAppKeyForStatus(windowId) { /* ... same as before ... */ 
             if (windowId === "weatherAppWindow") return "weatherAppWindow";
             if (["calendarWindow", "formWindow", "listWindow", "backupWindow", "clockWindow"].includes(windowId)) return "diaryApp";
             if (windowId === "hrrAppWindow") return "hrrAppWindow";
             return null;
         },
-
-        setupDesktopIcons() {
+        setupDesktopIcons() { /* ... same as before ... */ 
             document.querySelectorAll('.desktop-icon').forEach(icon => {
                 icon.addEventListener('click', () => {
-                    const appId = icon.dataset.appId;
-                    this.launchApp(appId);
+                    const appId = icon.dataset.appId; this.launchApp(appId);
                 });
             });
         },
-        
-        setupCloseButtons() {
-            document.querySelectorAll('.close-btn-pseudo').forEach(button => {
+        setupCloseButtons() { /* ... same as before, refined appStatus reset ... */
+             document.querySelectorAll('.close-btn-pseudo').forEach(button => {
                 button.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const windowId = button.dataset.windowId;
-                    const windowEl = document.getElementById(windowId);
-                    if (windowEl) {
-                        windowEl.style.display = 'none';
-                        this.saveWindowState(windowId, { visible: false });
-                        // For single window apps, we can reset their "initialized" status if desired
-                        // For multi-window apps like diary, it's usually better to keep them initialized
-                        // as closing one window doesn't mean closing the app.
+                    e.stopPropagation(); const windowId = button.dataset.windowId; const windowEl = document.getElementById(windowId);
+                    if (windowEl) { windowEl.style.display = 'none'; this.saveWindowState(windowId, { visible: false });
                         const appKey = this.getAppKeyForStatus(windowId);
-                        if (appKey && (appKey === "hrrAppWindow" || appKey === "weatherAppWindow")) {
-                             // Check if ALL windows of this app are now closed
-                            let allClosed = true;
-                            const windowsToCheck = this.appWindows[appKey];
-                            if (Array.isArray(windowsToCheck)) { // Should not happen for HRR/Weather
-                                // allClosed = windowsToCheck.every(win => win.style.display === 'none');
-                            } else if (windowsToCheck) {
-                                allClosed = windowsToCheck.style.display === 'none';
-                            }
-                            if (allClosed) {
-                                this.appStatus[appKey] = false; // Allow re-initialization
+                        if (appKey && this.appStatus[appKey]) {
+                            if (appKey === "diaryApp") { // For multi-window, check if ALL are closed
+                                const allDiaryWindowsClosed = this.appWindows.diaryApp.every(win => win.style.display === 'none');
+                                if (allDiaryWindowsClosed) this.appStatus[appKey].initialized = false; // Or some other logic
+                            } else { // Single window apps
+                                this.appStatus[appKey].initialized = false;
+                                if (appKey === "weatherAppWindow") this.appStatus[appKey].dataLoaded = false;
                             }
                         }
                     }
@@ -894,234 +860,190 @@
         launchApp(appIdOrKey, bringToFrontOnClick = true) {
             let windowsToManage = [];
             let appKeyForStatus = appIdOrKey;
-            let initFunction = null;
+            let appObject = null; // Reference to the app's JS object
 
             if (appIdOrKey === 'weatherAppWindow') {
                 windowsToManage.push(this.appWindows.weatherAppWindow);
-                initFunction = weatherApp.init.bind(weatherApp);
+                appObject = weatherApp;
             } else if (appIdOrKey === 'diaryApp') {
                 windowsToManage = this.appWindows.diaryApp;
                 appKeyForStatus = 'diaryApp';
-                initFunction = diaryApp.init.bind(diaryApp);
+                appObject = diaryApp;
             } else if (appIdOrKey === 'hrrAppWindow') {
                 windowsToManage.push(this.appWindows.hrrAppWindow);
-                initFunction = hrrApp.init.bind(hrrApp);
+                appObject = hrrApp;
             }
 
-            let wasAnyWindowNewlyShown = false;
+            if (!appObject) return;
+
+            // Initialize app status if it doesn't exist
+            if (!this.appStatus[appKeyForStatus]) {
+                this.appStatus[appKeyForStatus] = { initialized: false, dataLoaded: false }; // dataLoaded mainly for weather
+            }
+
+            // Step 1: Initialize app object if not already done
+            if (!this.appStatus[appKeyForStatus].initialized) {
+                if (typeof appObject.init === 'function') {
+                    appObject.init();
+                }
+                this.appStatus[appKeyForStatus].initialized = true;
+            }
+
+            // Step 2: Show windows, apply styles, and call onShow
             windowsToManage.forEach(winEl => {
                 if (winEl) {
-                    if (winEl.style.display === 'none') {
-                        winEl.style.display = 'flex';
-                        wasAnyWindowNewlyShown = true;
-                        // Call app-specific onShow logic if needed AFTER display is set
-                        if (winEl.id === 'weatherAppWindow' && typeof weatherApp !== 'undefined') {
-                            weatherApp.setupWeatherEffectsCanvas(); // Crucial for canvas sizing
-                            if (weatherApp._appState.weatherEffect.currentEffectType) {
-                               weatherApp.startWeatherEffect(weatherApp._appState.weatherEffect.currentEffectType);
-                            }
-                        }
-                         if (winEl.id === 'clockWindow' && typeof diaryApp !== 'undefined') {
-                            diaryApp.setupClockCanvas(); // Ensure canvas is setup
-                            diaryApp.drawClock();
-                        }
+                    let wasHidden = winEl.style.display === 'none';
+                    if (wasHidden) {
+                        winEl.style.display = 'flex'; // Make visible first
+                        // Ensure dimensions are set from saved state or defaults
+                        const state = this.getWindowStates()[winEl.id] || {};
+                        const defaultSize = this.getDefaultSize(winEl.id);
+                        winEl.style.width = state.width || defaultSize.width;
+                        winEl.style.height = state.height || defaultSize.height;
                     }
-                    if (bringToFrontOnClick) {
+
+                    if (bringToFrontOnClick || wasHidden) { // Bring to front if clicked or newly shown
                         this.bringToFront(winEl);
                     }
                     this.saveWindowState(winEl.id, { visible: true, zIndex: winEl.style.zIndex });
+
+                    // Call app's onShow method (if it exists) AFTER it's displayed and sized
+                    if (wasHidden && typeof appObject.onShow === 'function') {
+                         requestAnimationFrame(() => { // Defer slightly for DOM updates
+                            appObject.onShow(winEl.id); // Pass windowId if onShow needs it
+                         });
+                    }
                 }
             });
-            
-            if (initFunction && (!this.appStatus[appKeyForStatus])) { // Initialize only if not already done
-                initFunction();
-                this.appStatus[appKeyForStatus] = true;
-            }
         },
-
-        bringToFront(elmnt) {
-            if (!elmnt) return;
-            this.highestZ++;
-            elmnt.style.zIndex = this.highestZ;
-            this.saveWindowState(elmnt.id, { zIndex: this.highestZ.toString() });
+        bringToFront(elmnt) { /* ... same as before ... */ 
+             if (!elmnt) return; this.highestZ++; elmnt.style.zIndex = this.highestZ;
+             this.saveWindowState(elmnt.id, { zIndex: this.highestZ.toString() });
         },
-
-        makeDraggable(elmnt) {
-            if (!elmnt) return;
-            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-            const titleBar = elmnt.querySelector(".draggable-title-bar");
-            const parentContainer = document.getElementById("desktopArea");
-
+        makeDraggable(elmnt) { /* ... same as before ... */ 
+            if (!elmnt) return; let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            const titleBar = elmnt.querySelector(".draggable-title-bar"); const parentContainer = document.getElementById("desktopArea");
             const bringToFrontHandler = () => this.bringToFront(elmnt);
-            elmnt.removeEventListener('mousedown', bringToFrontHandler, false); // Remove if previously added
-            elmnt.addEventListener('mousedown', bringToFrontHandler, false);
-
-
-            if (titleBar) { 
-                titleBar.onmousedown = null; // Clear previous
-                titleBar.onmousedown = dragMouseDown.bind(this); 
-            }
-
-            function dragMouseDown(e) {
-                if (e.target.classList.contains('close-btn-pseudo')) return;
-                e = e || window.event; e.preventDefault();
-                pos3 = e.clientX; pos4 = e.clientY;
-                document.onmouseup = closeDragElement.bind(this);
-                document.onmousemove = elementDrag.bind(this);
-            }
-
-            function elementDrag(e) {
-                e = e || window.event; e.preventDefault();
-                pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
-                pos3 = e.clientX; pos4 = e.clientY;
-                let newTop = elmnt.offsetTop - pos2; let newLeft = elmnt.offsetLeft - pos1;
-
-                if (parentContainer) {
-                    if (newTop < 0) newTop = 0; if (newLeft < 0) newLeft = 0;
-                    if (newTop + elmnt.offsetHeight > parentContainer.clientHeight) {
-                        newTop = Math.max(0, parentContainer.clientHeight - elmnt.offsetHeight);
-                    }
-                    if (newLeft + elmnt.offsetWidth > parentContainer.clientWidth) {
-                        newLeft = Math.max(0, parentContainer.clientWidth - elmnt.offsetWidth);
-                    }
-                }
+            elmnt.removeEventListener('mousedown', bringToFrontHandler, false); elmnt.addEventListener('mousedown', bringToFrontHandler, false);
+            if (titleBar) { titleBar.onmousedown = null; titleBar.onmousedown = dragMouseDown.bind(this); }
+            function dragMouseDown(e) { if (e.target.classList.contains('close-btn-pseudo')) return; e = e || window.event; e.preventDefault(); pos3 = e.clientX; pos4 = e.clientY; document.onmouseup = closeDragElement.bind(this); document.onmousemove = elementDrag.bind(this); }
+            function elementDrag(e) { e = e || window.event; e.preventDefault(); pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY; pos3 = e.clientX; pos4 = e.clientY; let newTop = elmnt.offsetTop - pos2; let newLeft = elmnt.offsetLeft - pos1;
+                if (parentContainer) { if (newTop < 0) newTop = 0; if (newLeft < 0) newLeft = 0; if (newTop + elmnt.offsetHeight > parentContainer.clientHeight) newTop = Math.max(0, parentContainer.clientHeight - elmnt.offsetHeight); if (newLeft + elmnt.offsetWidth > parentContainer.clientWidth) newLeft = Math.max(0, parentContainer.clientWidth - elmnt.offsetWidth); }
                 elmnt.style.top = newTop + "px"; elmnt.style.left = newLeft + "px";
             }
-
-            function closeDragElement() {
-                document.onmouseup = null; document.onmousemove = null;
-                this.saveWindowState(elmnt.id, { top: elmnt.style.top, left: elmnt.style.left });
-            }
+            function closeDragElement() { document.onmouseup = null; document.onmousemove = null; this.saveWindowState(elmnt.id, { top: elmnt.style.top, left: elmnt.style.left }); }
         },
-        
-        getWindowStates() {
-            const states = localStorage.getItem(this.WINDOW_STATES_KEY);
-            return states ? JSON.parse(states) : {};
+        getWindowStates() { /* ... same as before ... */ 
+            const states = localStorage.getItem(this.WINDOW_STATES_KEY); return states ? JSON.parse(states) : {};
         },
-
-        saveWindowState(windowId, newPartialState) {
-            const states = this.getWindowStates();
-            states[windowId] = { ...(states[windowId] || {}), ...newPartialState };
+        saveWindowState(windowId, newPartialState) { /* ... same as before ... */ 
+            const states = this.getWindowStates(); states[windowId] = { ...(states[windowId] || {}), ...newPartialState };
             localStorage.setItem(this.WINDOW_STATES_KEY, JSON.stringify(states));
         },
-
-        loadWindowStates() {
-            const states = this.getWindowStates();
-            let maxZ = 0;
-            const desktop = document.getElementById("desktopArea");
-            const parentWidth = desktop.clientWidth;
-            const parentHeight = desktop.clientHeight;
-
-            const allWindowElements = [
-                this.appWindows.weatherAppWindow,
-                ...(this.appWindows.diaryApp || []),
-                this.appWindows.hrrAppWindow
-            ].filter(Boolean);
-
-            allWindowElements.forEach((el, index) => {
-                if (!el) return;
-                
-                const state = states[el.id];
-                let appliedPosition = false;
-
+        loadWindowStates() { /* ... same, but relies on launchApp to make visible if state.visible is true ... */
+            const states = this.getWindowStates(); let maxZ = 0; const desktop = document.getElementById("desktopArea"); const parentWidth = desktop.clientWidth; const parentHeight = desktop.clientHeight;
+            const allWindowElements = [ this.appWindows.weatherAppWindow, ...(this.appWindows.diaryApp || []), this.appWindows.hrrAppWindow ].filter(Boolean);
+            allWindowElements.forEach((el, index) => { if (!el) return; const state = states[el.id]; let appliedPosition = false; const defaultPos = this.getDefaultPosition(el.id, index); const defaultSize = this.getDefaultSize(el.id);
                 if (state) {
-                    if (state.top && state.left) { el.style.top = state.top; el.style.left = state.left; appliedPosition = true; }
-                    if (state.width) el.style.width = state.width;
-                    if (state.height) el.style.height = state.height;
+                    el.style.top = state.top || defaultPos.top; el.style.left = state.left || defaultPos.left; appliedPosition = !!(state.top && state.left);
+                    el.style.width = state.width || defaultSize.width; el.style.height = state.height || defaultSize.height;
                     if (state.zIndex) { const z = parseInt(state.zIndex, 10); el.style.zIndex = z; if (z > maxZ) maxZ = z; }
-                    // Visibility will be handled by auto-launch logic later
-                    // el.style.display = state.visible === false ? 'none' : 'flex';
-                }
-
-                const defaultPos = this.getDefaultPosition(el.id, index);
-                const defaultSize = this.getDefaultSize(el.id);
-
-                if (!appliedPosition) { el.style.top = defaultPos.top; el.style.left = defaultPos.left; }
-                if (!state || !state.width || parseInt(state.width) <=0) el.style.width = defaultSize.width;
-                if (!state || !state.height || parseInt(state.height) <=0) el.style.height = defaultSize.height;
-
-                let currentLeft = parseInt(el.style.left, 10) || defaultPos.leftPx;
-                let currentTop = parseInt(el.style.top, 10) || defaultPos.topPx;
-                let currentWidth = parseInt(el.style.width, 10) || defaultSize.widthPx;
-                let currentHeight = parseInt(el.style.height, 10) || defaultSize.heightPx;
-
-                if (currentLeft + currentWidth > parentWidth) el.style.left = Math.max(0, parentWidth - currentWidth - 10) + 'px';
-                if (currentTop + currentHeight > parentHeight) el.style.top = Math.max(0, parentHeight - currentHeight - 10) + 'px';
-                if (currentLeft < 0) el.style.left = '10px';
-                if (currentTop < 0) el.style.top = '10px';
-
-                // Set initial display to none; auto-launch will make them visible if needed
-                el.style.display = 'none';
-                 if (state && state.visible && (!state.zIndex)) { // If visible from save but no zIndex, assign one
-                    maxZ++; el.style.zIndex = maxZ;
-                 }
-            });
-            this.highestZ = maxZ || 1;
+                } else { el.style.top = defaultPos.top; el.style.left = defaultPos.left; el.style.width = defaultSize.width; el.style.height = defaultSize.height; }
+                let currentLeft = parseInt(el.style.left,10), currentTop=parseInt(el.style.top,10), currentWidth=parseInt(el.style.width,10), currentHeight=parseInt(el.style.height,10);
+                if(currentLeft+currentWidth > parentWidth) el.style.left = Math.max(0, parentWidth-currentWidth-10)+'px'; if(currentTop+currentHeight > parentHeight) el.style.top = Math.max(0, parentHeight-currentHeight-10)+'px'; if(currentLeft < 0) el.style.left = '10px'; if(currentTop < 0) el.style.top = '10px';
+                el.style.display = 'none'; // Always start hidden, launchApp will show
+                if (state && state.visible && !state.zIndex) { maxZ++; el.style.zIndex = maxZ; }
+            }); this.highestZ = maxZ || 1;
         },
-        getDefaultPosition(windowId, index) {
-            const stagger = 30; const baseTop = 20; const baseLeft = 20;
-            let topPx = baseTop + index * stagger; let leftPx = baseLeft + index * stagger;
-            const desktop = document.getElementById("desktopArea");
-            const defaultSize = this.getDefaultSize(windowId);
-            if (leftPx + defaultSize.widthPx > desktop.clientWidth) { leftPx = baseLeft; topPx += stagger * 3; }
-            if (topPx + defaultSize.heightPx > desktop.clientHeight) { topPx = baseTop; }
-            return { top: topPx + 'px', left: leftPx + 'px', topPx, leftPx };
+        getDefaultPosition(windowId, index) { /* ... same as before ... */ 
+            const stagger = 30; const baseTop = 20; const baseLeft = 20; let topPx = baseTop + index * stagger; let leftPx = baseLeft + index * stagger; const desktop = document.getElementById("desktopArea"); const defaultSize = this.getDefaultSize(windowId); if (leftPx + defaultSize.widthPx > desktop.clientWidth) { leftPx = baseLeft; topPx += stagger * 3; } if (topPx + defaultSize.heightPx > desktop.clientHeight) { topPx = baseTop; } return { top: topPx + 'px', left: leftPx + 'px', topPx, leftPx };
         },
-        getDefaultSize(windowId) {
-            let width = "400px", height = "300px";
-            switch(windowId) {
-                case "weatherAppWindow": width="750px"; height="550px"; break;
-                case "diaryApp": /* This is a conceptual group */ break;
-                case "calendarWindow": width="240px"; height="270px"; break;
-                case "formWindow": width="330px"; height="380px"; break;
-                case "listWindow": width="420px"; height="420px"; break;
-                case "backupWindow": width="200px"; height="100px"; break;
-                case "clockWindow": width="160px"; height="180px"; break;
-                case "hrrAppWindow": width="650px"; height="400px"; break;
-            }
-            return { width, height, widthPx: parseInt(width), heightPx: parseInt(height) };
+        getDefaultSize(windowId) { /* ... same as before ... */ 
+            let width = "400px", height = "300px"; switch(windowId) { case "weatherAppWindow": width="750px"; height="550px"; break; case "diaryApp": break; case "calendarWindow": width="240px"; height="270px"; break; case "formWindow": width="330px"; height="380px"; break; case "listWindow": width="420px"; height="420px"; break; case "backupWindow": width="200px"; height="100px"; break; case "clockWindow": width="160px"; height="180px"; break; case "hrrAppWindow": width="650px"; height="400px"; break;} return { width, height, widthPx: parseInt(width), heightPx: parseInt(height) };
         },
-        showPopup(message, duration = 2200) {
-            const popupElement = document.getElementById('popupNotificationGlobal');
-            if (this.popupTimeout) clearTimeout(this.popupTimeout);
-            popupElement.textContent = message; popupElement.classList.add('show');
-            this.popupTimeout = setTimeout(() => { popupElement.classList.remove('show'); }, duration);
+        showPopup(message, duration = 2200) { /* ... same as before ... */ 
+            const popupElement = document.getElementById('popupNotificationGlobal'); if (this.popupTimeout) clearTimeout(this.popupTimeout); popupElement.textContent = message; popupElement.classList.add('show'); this.popupTimeout = setTimeout(() => { popupElement.classList.remove('show'); }, duration);
         }
     };
 
     // --- App Specific JS Objects (Weather, Diary, HRR) ---
-    // (Their full JS code will be here, encapsulated as before)
-
-    const weatherApp = { /* ... Full Weather App JS as in previous complete response ... */ 
+    const weatherApp = {
+        // ... (Keep full weatherApp JS as in the previous complete response, but add onShow)
         CONFIG: { /* ... */ }, ICON_ANIMATION_MAP: { /* ... */ }, DOM: {}, _appState: { /* ... */ }, weatherEffectsCtx: null,
-        init() { /* ... */ }, getWeatherDetails(wmoCode, isDay = true) { /* ... */ }, formatTime(dateString, includeSeconds = false) { /* ... */ }, degreesToCardinal(deg) { /* ... */ }, applySpecificIconAnimation(element, iconChar) { /* ... */ }, getChartColors() { /* ... */ }, getBaseChartOptions() { /* ... */ }, createChartDatasetOptions(type, colors, ctx, label, data) { /* ... */ }, renderSkeleton(show = true) { /* ... */ }, renderError(message, url = null) { /* ... */ }, clearError() { /* ... */ }, renderCurrentWeather(current, hourly, timezone) { /* ... */ }, renderWeeklyTempChart(dailyData) { /* ... */ }, createForecastCardHTML(dayData, index) { /* ... */ }, renderDailyForecasts(dailyData) { /* ... */ }, createHourlyForecastItemHTML(hourlyData, index) { /* ... */ }, renderHourlyDataInModal(dateStr, dayName, monthDay) { /* ... */ },
-        setupWeatherEffectsCanvas() {
-            if (!this.DOM.weatherEffectsCanvas) { console.warn("Weather: Canvas not found for setup."); return; }
-            this.weatherEffectsCtx = this.DOM.weatherEffectsCanvas.getContext('2d');
-            const parent = this.DOM.weatherEffectsCanvas.parentElement; // Should be .beos-window-content-area
-            if (parent && parent.clientWidth > 0 && parent.clientHeight > 0) {
-                this.DOM.weatherEffectsCanvas.width = parent.clientWidth;
-                this.DOM.weatherEffectsCanvas.height = parent.clientHeight;
-            } else { // Fallback if parent isn't ready or sized
-                // console.warn("Weather: Canvas parent not ready or sized, using window default size for canvas.");
-                // const defaultSize = globalDesktop.getDefaultSize("weatherAppWindow");
-                // this.DOM.weatherEffectsCanvas.width = parseInt(defaultSize.width);
-                // this.DOM.weatherEffectsCanvas.height = parseInt(defaultSize.height);
-            }
+        init() { /* DOM setup, event listeners for modal/cards. NO data loading or canvas sizing yet */
+            const appWindow = document.getElementById('weatherAppWindow'); if(!appWindow) return; this.DOM = { /* ... populate all DOM elements ... */ };
+            if(this.DOM.weatherEffectsCanvas) this.weatherEffectsCtx = this.DOM.weatherEffectsCanvas.getContext('2d');
+            this.setupEventListeners(); // Listeners that don't depend on data
         },
+        onShow() { // Called by globalDesktop when window is made visible
+            requestAnimationFrame(() => { // Defer to ensure DOM is ready
+                this.setupWeatherEffectsCanvas(); // Now size the canvas
+                if (!globalDesktop.appStatus.weatherAppWindow.dataLoaded) {
+                    this.loadWeatherData(); // Load data if not already loaded
+                    globalDesktop.appStatus.weatherAppWindow.dataLoaded = true;
+                } else { // Data loaded, just ensure effects are running if they should be
+                    if (this._appState.weatherEffect.currentEffectType) {
+                        this.startWeatherEffect(this._appState.weatherEffect.currentEffectType);
+                    }
+                }
+            });
+        },
+        // ... (all other weatherApp methods: getWeatherDetails, formatTime, etc.)
+        // Make sure loadWeatherData calls setupWeatherEffectsCanvas *before* startWeatherEffect
+        // and also calls renderSkeleton(false) at the end of successful data processing.
+        setupWeatherEffectsCanvas() { /* ... same as before, ensure it uses parentElement.clientWidth/Height */ },
         Particle: function(effectType, canvasRef, colors) { /* ... */ }, drawParticle(p) { /* ... */ }, updateParticle(p) { /* ... */ }, createParticles(effectType) { /* ... */ }, animateParticles() { /* ... */ }, startWeatherEffect(effectType) { /* ... */ }, fetchWeatherData() { /* ... */ }, processAndDisplayWeatherData(weatherData) { /* ... */ }, loadWeatherData(showSkeletonUI = true) { /* ... */ }, setupEventListeners() { /* ... */ }
     };
     weatherApp.Particle.prototype.draw = weatherApp.drawParticle; 
     weatherApp.Particle.prototype.update = weatherApp.updateParticle;
 
-    const diaryApp = { /* ... Full Diary App JS as in previous complete response ... */
+
+    const diaryApp = {
+        // ... (Keep full diaryApp JS, but add onShow for clock)
         DOM: {}, DIARY_LOCAL_STORAGE_KEY: 'beosDesktopDiary_v1', currentYear: new Date().getFullYear(), currentMonth: new Date().getMonth(), selectedDate: null, clockCanvas: null, clockCtx: null, clockRadius: null, clockUpdateInterval: null,
-        init() { /* ... */ }, setupEventListeners() { /* ... */ }, getAllDiaryEntries() { /* ... */ }, saveDiaryEntries(entries) { /* ... */ }, formatDateForStorage(dateObj) { /* ... */ }, formatDateForDisplay(dateString) { /* ... */ }, renderDiaryEntries(dateFilter = null) { /* ... */ }, addDiaryEntryToDOM(entry, originalIndex) { /* ... */ }, loadDiaryForEditing(index) { /* ... */ }, resetForm() { /* ... */ }, handleDiarySubmit(event) { /* ... */ }, deleteDiaryEntry(indexToDelete) { /* ... */ }, generateCalendar(year, month) { /* ... */ }, updateCalendarHighlights() { /* ... */ }, performBackup() { /* ... */ }, setupClockCanvas() { /* ... */ }, drawHand(pos, length, width, color) { /* ... */ }, drawClock() { /* ... */ }
+        init() { /* DOM setup, calendar setup, main event listeners (form, month nav, backup) */
+            this.DOM = { /* ... populate all DOM elements ... */ };
+            this.selectedDate = this.formatDateForStorage(new Date());
+            this.generateCalendar(this.currentYear, this.currentMonth);
+            this.renderDiaryEntries(this.selectedDate);
+            this.setupEventListeners(); // For form, buttons, etc.
+        },
+        onShow(shownWindowId) { // Called by globalDesktop for each diary window made visible
+            if (shownWindowId === 'clockWindow' && this.DOM.clockCanvas) {
+                requestAnimationFrame(() => {
+                    this.setupClockCanvas();
+                    this.drawClock();
+                    if (this.clockUpdateInterval) clearInterval(this.clockUpdateInterval);
+                    this.clockUpdateInterval = setInterval(() => {
+                        const clockWindowEl = document.getElementById("clockWindow");
+                        if (clockWindowEl && clockWindowEl.style.display !== 'none') {
+                           if (!this.clockCanvas) this.setupClockCanvas(); 
+                           if (this.clockCanvas) this.drawClock();
+                        } else { clearInterval(this.clockUpdateInterval); this.clockUpdateInterval = null;} // Stop if hidden
+                    }, 5000);
+                });
+            }
+            // Other diary windows might not need specific onShow logic if their content is static or updated by other means
+        },
+        // ... (all other diaryApp methods: getAllDiaryEntries, saveDiaryEntries, etc.)
+        setupClockCanvas() { /* ... same as before ... */ }, drawHand(pos, length, width, color) { /* ... */ }, drawClock() { /* ... */ },
+        setupEventListeners() { /* ... */ }, getAllDiaryEntries() { /* ... */ }, saveDiaryEntries(entries) { /* ... */ }, formatDateForStorage(dateObj) { /* ... */ }, formatDateForDisplay(dateString) { /* ... */ }, renderDiaryEntries(dateFilter = null) { /* ... */ }, addDiaryEntryToDOM(entry, originalIndex) { /* ... */ }, loadDiaryForEditing(index) { /* ... */ }, resetForm() { /* ... */ }, handleDiarySubmit(event) { /* ... */ }, deleteDiaryEntry(indexToDelete) { /* ... */ }, generateCalendar(year, month) { /* ... */ }, updateCalendarHighlights() { /* ... */ }, performBackup() { /* ... */ }
     };
 
-    const hrrApp = { /* ... Full HRR App JS as in previous complete response ... */
+    const hrrApp = {
+        // ... (Keep full hrrApp JS, onShow might not be strictly needed if init handles its simple UI)
         UI_ELEMENTS: {}, COPY_BUTTON_FEEDBACK_DURATION_MS: 1500,
-        init() { /* ... */ }, normalizeNewlines(text) { /* ... */ }, removeSingleInternalNewlines(text) { /* ... */ }, updateTextStats(text, statusBarElement) { /* ... */ }, updateOutputText() { /* ... */ }, updateCopyButtonState(button, text, isDisabled) { /* ... */ }, handleCopyAction() { /* ... */ }, handleClearInputAction() { /* ... */ }, handleSaveAction() { /* ... */ }
+        init() { /* DOM setup, event listeners, initial updateOutputText */
+            const appWindow = document.getElementById('hrrAppWindow'); if (!appWindow) return; this.UI_ELEMENTS = { /* ... populate ... */};
+            const clearAndAddListener = (element, event, handler) => { if (element) { const newElement = element.cloneNode(true); element.parentNode.replaceChild(newElement, element); newElement.addEventListener(event, handler.bind(this)); return newElement; } return element; };
+            this.UI_ELEMENTS.inputTextArea = clearAndAddListener(this.UI_ELEMENTS.inputTextArea, 'input', this.updateOutputText); this.UI_ELEMENTS.copyButton = clearAndAddListener(this.UI_ELEMENTS.copyButton, 'click', this.handleCopyAction); this.UI_ELEMENTS.saveButton = clearAndAddListener(this.UI_ELEMENTS.saveButton, 'click', this.handleSaveAction); this.UI_ELEMENTS.clearInputButton = clearAndAddListener(this.UI_ELEMENTS.clearInputButton, 'click', this.handleClearInputAction);
+            this.updateOutputText(); // Initial state
+        },
+        onShow() { // Good practice, even if not much happens here for HRR
+            if(this.UI_ELEMENTS.inputTextArea) this.UI_ELEMENTS.inputTextArea.focus();
+        },
+        // ... (all other hrrApp methods)
+        normalizeNewlines(text) { /* ... */ }, removeSingleInternalNewlines(text) { /* ... */ }, updateTextStats(text, statusBarElement) { /* ... */ }, updateOutputText() { /* ... */ }, updateCopyButtonState(button, text, isDisabled) { /* ... */ }, handleCopyAction() { /* ... */ }, handleClearInputAction() { /* ... */ }, handleSaveAction() { /* ... */ }
     };
 
     // --- Initialization ---
