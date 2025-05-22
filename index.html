@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌟 BeOS Integrated Desktop</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+    <style>
+        :root {
+            --beos-bg: #D4D0C8; --beos-window-bg: #C0C0C0; --beos-widget-bg: #BFBFBF;
+            --beos-title-bar: #FFD700; --beos-text: #000000; --beos-border-light: #FFFFFF;
+            --beos-border-dark: #707070; --beos-button-bg: #C8C8C8; --beos-button-hover-bg: #B8B8B8;
+            --beos-button-active-bg: #A0A0A0; --beos-input-bg: #FFFFFF; --beos-tab-text: #000000;
+            --beos-shadow: rgba(0,0,0,0.35); --beos-scrollbar-track: #D0D0D0; --beos-scrollbar-thumb: #A0A0A0;
+            --scrollbar-width: 16px; --container-padding: 10px; --window-content-base-padding: 8px;
+
+            --weather-accent-color-warm: #cc3333; --weather-accent-color-cold: #336699;
+            --weather-rain-color: #336699; --weather-snow-color: #b0c4de;
+            --weather-font-family: "Tahoma","Geneva","Verdana",sans-serif; --weather-skeleton-bg: #d0d0d0;
+            --weather-skeleton-shine: rgba(255,255,255,0.2); --weather-shadow-color: var(--beos-border-dark);
+        }
+        :root[data-theme="dark"] {
+            --beos-bg: #3a3a3a; --beos-window-bg: #474747; --beos-widget-bg: #505050;
+            --beos-title-bar: #5a5a5a; --beos-text: #dddddd; --beos-border-light: #6f6f6f;
+            --beos-border-dark: #2c2c2c; --beos-button-bg: #555555; --beos-button-hover-bg: #606060;
+            --beos-button-active-bg: #454545; --beos-input-bg: #333333; --beos-tab-text: #dddddd;
+            --beos-shadow: rgba(0,0,0,0.5); --beos-scrollbar-track: #505050; --beos-scrollbar-thumb: #686868;
+            
+            --weather-accent-color-warm: #ff6666; --weather-accent-color-cold: #77aaff;
+            --weather-rain-color: #77aaff; --weather-snow-color: #cccccc;
+            --weather-skeleton-bg: #505050; --weather-skeleton-shine: rgba(200,200,200,0.1);
+            --weather-shadow-color: var(--beos-border-dark);
+        }
+
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body {
+            font-family: "Tahoma","Geneva","Verdana",sans-serif; background-color: var(--beos-bg);
+            color: var(--beos-text); display: flex; flex-direction: column;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .beos-menubar-placeholder {
+            width:100%; height:20px; background-color:var(--beos-window-bg); border-bottom:1px solid var(--beos-border-dark);
+            flex-shrink:0; display:flex; align-items:center; padding:0 8px; font-size:0.8em; color:var(--beos-text); box-sizing:border-box;
+        }
+        .beos-menubar-placeholder span { margin-right: 15px; cursor: default; }
+        .beos-menubar-placeholder .menu-item { cursor: pointer; padding: 2px 5px; }
+        .beos-menubar-placeholder .menu-item:hover { background-color: var(--beos-button-hover-bg); }
+
+        .desktop-wrapper { width:100%; flex-grow:1; padding:var(--container-padding); box-sizing:border-box; position:relative; overflow:hidden; display: flex; flex-direction: column;}
+        
+        .desktop-icons-bar { /* Container for desktop icons */
+            display: flex;
+            flex-wrap: wrap; /* Allow icons to wrap if not enough space */
+            gap: 15px; /* Spacing between icons */
+            padding-bottom: var(--container-padding); /* Space before windows start */
+            flex-shrink: 0; /* Don't let it shrink */
+            position: relative; /* Ensure it's part of the flow */
+            z-index: 5; /* Below windows but above desktop bg */
+        }
+        .desktop-icon {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 80px; height: 80px; padding: 5px; background-color: transparent;
+            color: var(--beos-text); border-radius: 3px; cursor: pointer; text-align: center;
+            transition: background-color 0.15s; user-select: none;
+        }
+        .desktop-icon:hover { background-color: rgba(0,0,0,0.08); }
+        :root[data-theme="dark"] .desktop-icon:hover { background-color: rgba(255,255,255,0.08); }
+        .desktop-icon .icon-emoji { font-size: 36px; line-height: 1; margin-bottom: 5px; }
+        .desktop-icon .icon-label { font-size: 0.8em; word-break: break-word; }
+
+        .draggable-windows-area { /* Area where windows are actually placed */
+            flex-grow: 1;
+            position: relative; /* Critical for absolute positioning of windows */
+            width: 100%;
+            overflow: hidden; /* Important! */
+        }
+
+        .draggable-beos-window {
+            position:absolute; background-color:var(--beos-window-bg); border:1px solid;
+            border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light);
+            box-shadow:2px 2px 3px var(--beos-shadow); display:flex; flex-direction:column; overflow:hidden;
+            min-width:200px; min-height:150px; resize:both; border-radius:0; box-sizing:border-box;
+            /* display: none; /* Initially hidden, shown by JS */
+        }
+        .draggable-title-bar {
+            background:linear-gradient(to right, var(--beos-title-bar) 0%, #FFEE77 70%, var(--beos-title-bar) 100%);
+            color:var(--beos-tab-text); padding:0 6px 0 8px; font-weight:bold; border-bottom:1px solid var(--beos-border-dark);
+            display:flex; justify-content:space-between; align-items:center; flex-shrink:0; font-size:0.9em; height:22px;
+            box-sizing:border-box; cursor:move; user-select:none;
+        }
+        .draggable-title-bar > .title-bar-text { flex-grow:1; display:flex; align-items:center; }
+        .title-bar-icon { margin-right:5px; font-size:1em; line-height:1; }
+        .window-controls { display:flex; }
+        .title-bar-button-pseudo {
+            width:14px; height:14px; border:1px solid;
+            border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light);
+            background-color:var(--beos-button-bg); margin-left:3px; display:flex; align-items:center; justify-content:center;
+            box-shadow:1px 1px 0px var(--beos-border-dark); cursor:pointer;
+        }
+        .title-bar-button-pseudo:active {
+            border-color:var(--beos-border-dark) var(--beos-border-light) var(--beos-border-light) var(--beos-border-dark);
+            box-shadow:inset 1px 1px 0px var(--beos-border-dark);
+        }
+        .close-btn-symbol::before { content:"X"; font-size:8px; font-weight:bold; color:var(--beos-text); }
+        
+        .beos-window-content-area {
+            padding:var(--window-content-base-padding); flex-grow:1; display:flex; flex-direction:column;
+            background-color:var(--beos-input-bg); box-sizing:border-box; overflow:auto; min-height:0;
+        }
+        .beos-button {
+            background-color:var(--beos-button-bg); color:var(--beos-text); border:1px solid;
+            border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light);
+            padding:5px 10px; font-weight:normal; cursor:pointer; transition:background-color .1s,box-shadow .1s;
+            box-shadow:1px 1px 0 var(--beos-border-dark),1px 1px 0 1px var(--beos-shadow);
+            font-size:0.85em; border-radius:2px; text-shadow:1px 1px 0 var(--beos-border-light);
+        }
+        .beos-button:hover { background-color:var(--beos-button-hover-bg); }
+        .beos-button:active {
+            border-color:var(--beos-border-dark) var(--beos-border-light) var(--beos-border-light) var(--beos-border-dark);
+            box-shadow:inset 1px 1px 0 var(--beos-border-dark); transform:translate(1px,1px); text-shadow:none;
+        }
+        .beos-button:disabled {
+            color:var(--beos-border-dark); background-color:var(--beos-window-bg); text-shadow:1px 1px 0 var(--beos-border-light);
+            opacity:0.7; cursor:default; box-shadow:1px 1px 0 var(--beos-border-dark),1px 1px 0 1px var(--beos-shadow);
+        }
+        :root[data-theme="dark"] .beos-button:disabled { color:var(--beos-border-light); text-shadow:1px 1px 0 var(--beos-border-dark); }
+
+        .popup-notification { 
+            position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background-color:var(--beos-window-bg);
+            color:var(--beos-text); padding:15px 25px; border:1px solid;
+            border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light);
+            box-shadow:3px 3px 5px var(--beos-shadow); font-size:0.9em; z-index:100000; opacity:0; visibility:hidden;
+            transition:opacity .3s ease-in-out,visibility .3s ease-in-out,top .3s ease-in-out; min-width:200px; text-align:center;
+        }
+        .popup-notification.show { opacity:1; visibility:visible; top:calc(50% - 20px); }
+
+        /* DIARY APP specific styles for its *internal* windows */
+        #diaryAppWindow .page-content-wrapper { width:100%; height:100%; padding:0; box-sizing:border-box; position:relative; overflow:hidden; background-color:var(--beos-bg); }
+        #diaryAppWindow #calendarWindow .beos-window-content-area { padding:5px; background-color:var(--beos-window-bg); overflow-y:auto; }
+        #diaryAppWindow #calendarContainer { text-align:center; font-size:0.85em; user-select:none; }
+        #diaryAppWindow #calendarHeader { margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; }
+        #diaryAppWindow #calendarHeader button { padding:2px 5px; font-size:0.9em; }
+        #diaryAppWindow #currentMonthYear { font-weight:bold; }
+        #diaryAppWindow #calendarTable { width:100%; border-collapse:collapse; table-layout:fixed; }
+        #diaryAppWindow #calendarTable th, #diaryAppWindow #calendarTable td { border:1px solid var(--beos-border-dark); padding:3px 0; text-align:center; height:25px; box-sizing:border-box; }
+        #diaryAppWindow #calendarTable th { background-color:var(--beos-button-bg); font-weight:normal; }
+        #diaryAppWindow #calendarTable td { cursor:pointer; }
+        #diaryAppWindow #calendarTable td:hover { background-color:var(--beos-button-hover-bg); }
+        #diaryAppWindow #calendarTable td.today { background-color:var(--beos-title-bar)!important; font-weight:bold; color:var(--beos-text)!important; }
+        #diaryAppWindow #calendarTable td.selected-date { background-color:var(--beos-text)!important; color:var(--beos-border-light)!important; border:1px solid var(--beos-title-bar); }
+        #diaryAppWindow #calendarTable td.has-diary { font-weight:bold; position:relative; }
+        #diaryAppWindow #calendarTable td.has-diary::after { content:'●'; font-size:0.5em; color:var(--beos-title-bar); position:absolute; bottom:2px; left:50%; transform:translateX(-50%); }
+        #diaryAppWindow #calendarTable td.other-month { color:#999; }
+        :root[data-theme="dark"] #diaryAppWindow #calendarTable td.other-month { color:#666; }
+        #diaryAppWindow #formWindow .beos-window-content-area { padding:6px; overflow:hidden; }
+        #diaryAppWindow #diaryForm { display:flex; flex-direction:column; flex-grow:1; min-height:0; }
+        #diaryAppWindow .form-group label { color:var(--beos-text); opacity:0.8; display: block; margin-bottom: 2px; font-weight: normal; font-size: 0.8em; flex-shrink: 0;}
+        :root[data-theme="dark"] #diaryAppWindow .form-group label { opacity:0.9; }
+        #diaryAppWindow .form-group-title { flex-shrink: 0; margin-bottom: 5px; }
+        #diaryAppWindow .form-group-content { flex-grow: 1; flex-shrink: 1; flex-basis: 0; min-height: 0; display: flex; flex-direction: column; margin-bottom: 5px; }
+        #diaryAppWindow #diaryTitle, #diaryAppWindow #diaryContent { border:1px inset var(--beos-border-dark); color:var(--beos-text); background-color:var(--beos-input-bg); padding:5px; box-sizing:border-box; width:100%; font-size:0.9em; }
+        #diaryAppWindow #diaryContent { flex-grow:1; resize:none; font-family:"Monaco","Courier New",monospace; font-size:0.95em; line-height:1.4; min-height:40px; }
+        #diaryAppWindow .form-buttons { flex-shrink:0; display:flex; flex-direction:row; justify-content:flex-end; gap:8px; margin-top:auto; padding-top:4px; }
+        #diaryAppWindow #listWindow .beos-window-content-area { overflow-y:auto; padding-right:calc(var(--window-content-base-padding) + var(--scrollbar-width) - 2px); }
+        #diaryAppWindow #diaryEntriesList { width:100%; box-sizing:border-box; }
+        #diaryAppWindow .diary-entry { background-color:var(--beos-input-bg); border:1px solid var(--beos-border-dark); padding:8px 10px; margin-bottom:8px; box-shadow:1px 1px 1px rgba(0,0,0,0.1); border-radius:0; box-sizing:border-box; width:100%; }
+        #diaryAppWindow .diary-title { font-size:1.1em; color:var(--beos-text); margin:0 0 2px 0; font-weight:bold; }
+        #diaryAppWindow .diary-date-display { font-size:0.7em; color:var(--beos-text); opacity:0.7; margin-bottom:6px; }
+        :root[data-theme="dark"] #diaryAppWindow .diary-date-display { opacity:0.6; }
+        #diaryAppWindow .diary-content { line-height:1.4; white-space:pre-wrap; font-size:0.9em; font-family:"Monaco","Courier New",monospace; word-break:break-word; color:var(--beos-text); }
+        #diaryAppWindow .diary-actions { float:right; margin-left:10px; }
+        #diaryAppWindow .diary-actions .beos-button { margin-left:5px; padding:2px 5px; font-size:0.75em; }
+        #diaryAppWindow #diaryEntriesList:empty::before { content:"✨ How was your day? Leave a secret diary entry here! ✍️\A Or find entries from other dates in the calendar! 📅"; white-space:pre-line; display:block; text-align:center; padding:15px; color:var(--beos-text); opacity:0.6; font-style:italic; font-size:0.9em; }
+        :root[data-theme="dark"] #diaryAppWindow #diaryEntriesList:empty::before { opacity:0.5; }
+        #diaryAppWindow #backupWindow .beos-window-content-area { display:flex; align-items:center; justify-content:center; padding:10px; }
+        #diaryAppWindow #clockWindow .beos-window-content-area { display:flex; align-items:center; justify-content:center; padding:5px; background-color:var(--beos-window-bg); }
+        #diaryAppWindow #analogClockCanvas { max-width:100%; max-height:100%; image-rendering:pixelated; image-rendering:crisp-edges; }
+
+        /* HARD RETURN REMOVER STYLES */
+        #removerAppWindow .beos-window-content-area { padding:0; overflow:hidden; background-color:var(--beos-bg); }
+        .app-window-remover { display:flex; flex-direction:column; width:100%; height:100%; background-color:var(--beos-window-bg); border-top:1px solid var(--beos-border-light); border-left:1px solid var(--beos-border-light); border-right:1px solid var(--beos-border-dark); border-bottom:1px solid var(--beos-border-dark); box-sizing:border-box; }
+        .app-window-remover .title-bar-remover { padding:4px var(--container-padding); background-color:var(--beos-title-bar); color:var(--beos-tab-text); font-size:14px; font-weight:bold; text-align:center; border-bottom:1px solid var(--beos-border-dark); user-select:none; flex-shrink:0; }
+        .app-window-remover .content-area-remover { display:flex; flex-grow:1; gap:var(--container-padding); padding:var(--container-padding); overflow:hidden; }
+        .app-window-remover .column { flex:1; display:flex; flex-direction:column; min-width:0; }
+        .app-window-remover .column-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; flex-shrink:0; }
+        .app-window-remover .editor-controls { display:flex; gap:4px; flex-shrink:0; }
+        .app-window-remover .editor-label { padding-left:2px; font-size:13px; font-weight:normal; flex-shrink:0; margin-right:var(--container-padding); color:var(--beos-text); }
+        .app-window-remover textarea { flex-grow:1; width:100%; padding:5px; box-sizing:border-box; resize:none; color:var(--beos-text); font-family:"Monaco","Courier New",monospace; font-size:14px; line-height:1.6; text-align:left; word-break:keep-all; background-color:var(--beos-input-bg); border-top:1px solid var(--beos-border-dark); border-left:1px solid var(--beos-border-dark); border-right:1px solid var(--beos-border-light); border-bottom:1px solid var(--beos-border-light); box-shadow:inset 1px 1px 0px 0px rgba(0,0,0,0.1); min-height:100px; }
+        .app-window-remover textarea:focus { outline:1px solid var(--beos-title-bar); }
+        .app-window-remover textarea::placeholder { color:var(--beos-border-dark); font-style:italic; }
+        :root[data-theme="dark"] .app-window-remover textarea::placeholder { color:var(--beos-border-light); }
+        .app-window-remover .column-status-bar { height:22px; line-height:22px; padding:0 var(--container-padding); font-size:12px; background-color:var(--beos-widget-bg); border-top:1px solid var(--beos-border-light); color:var(--beos-text); flex-shrink:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-top:5px; }
+        .app-window-remover textarea::-webkit-scrollbar { width:var(--scrollbar-width); height:var(--scrollbar-width); }
+        .app-window-remover textarea::-webkit-scrollbar-track { background-color:var(--beos-scrollbar-track); border-left:1px solid var(--beos-border-dark); }
+        .app-window-remover textarea::-webkit-scrollbar-thumb { background-color:var(--beos-button-bg); border-top:1px solid var(--beos-border-light); border-left:1px solid var(--beos-border-light); border-right:1px solid var(--beos-border-dark); border-bottom:1px solid var(--beos-border-dark); }
+        .app-window-remover textarea::-webkit-scrollbar-thumb:hover { background-color:var(--beos-button-hover-bg); }
+
+        /* WEATHER APP STYLES */
+        #weatherAppWindow .beos-window-content-area { font-family:var(--weather-font-family); background-color:var(--beos-window-bg); color:var(--beos-text); padding:var(--container-padding); display:flex; flex-direction:column; align-items:center; overflow-y:auto; }
+        #weatherAppWindow #weather-effects-canvas-el { position:absolute; top:0; left:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+        #weatherAppWindow .weather-container-main { width:100%; max-width:700px; display:flex; flex-direction:column; align-items:stretch; position:relative; z-index:1; }
+        #weatherAppWindow header { text-align:center; margin-bottom:calc(var(--container-padding) * 1.5); }
+        #weatherAppWindow header h1 { font-size:1.6em; font-weight:bold; color:var(--beos-text); margin-bottom:calc(var(--container-padding) * 0.25); }
+        #weatherAppWindow header p { font-size:0.9em; color:var(--beos-text); opacity:0.8; }
+        #weatherAppWindow .skeleton { background-color:var(--weather-skeleton-bg); border-radius:0; position:relative; overflow:hidden; }
+        #weatherAppWindow .skeleton::before { content:""; position:absolute; top:0; left:0; width:100%; height:100%; background:var(--weather-skeleton-shine); animation:beosSkeletonPulseWeather 1.8s infinite ease-in-out; opacity:0; }
+        @keyframes beosSkeletonPulseWeather {0%,100%{opacity:0;transform:translateX(-100%);}50%{opacity:1;transform:translateX(0);}100%{transform:translateX(100%);}}
+        #weatherAppWindow .skeleton-text { height:1em; margin-bottom:var(--container-padding); border-radius:0; }
+        #weatherAppWindow .skeleton-icon { width:4em; height:4em; border-radius:0; margin:0 auto; }
+        #weatherAppWindow .top-info-grid { display:flex; flex-direction:column; gap:var(--container-padding); margin-bottom:calc(var(--container-padding) * 1.5); width:100%; }
+        #weatherAppWindow .current-weather-section, #weatherAppWindow .aqi-section-weather, #weatherAppWindow .weekly-temp-chart-container { background-color:var(--beos-input-bg); border:1px solid; border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light); border-radius:0; box-shadow:1px 1px 0 var(--weather-shadow-color),2px 2px 0 var(--weather-shadow-color); padding:0; margin-bottom:var(--container-padding); width:100%; box-sizing:border-box; }
+        #weatherAppWindow .current-weather-section h2, #weatherAppWindow .aqi-section-weather h2, #weatherAppWindow .weekly-temp-chart-container h2 { background-color:var(--beos-title-bar); color:var(--beos-tab-text); padding:calc(var(--container-padding)*.3) var(--container-padding) calc(var(--container-padding)*.3) calc(var(--container-padding)*2.5); margin:0; border-bottom:1px solid var(--beos-border-dark); font-weight:bold; font-size:0.9em; position:relative; display:flex; align-items:center; justify-content:flex-start; text-align:left; }
+        #weatherAppWindow .current-weather-section h2::before, #weatherAppWindow .aqi-section-weather h2::before, #weatherAppWindow .weekly-temp-chart-container h2::before { content:''; position:absolute; left:var(--container-padding); top:50%; transform:translateY(-50%); height:calc(100% - var(--container-padding)*.35); width:calc(var(--container-padding)*1); background-color:var(--beos-title-bar); border:1px solid var(--beos-border-dark); border-right-color:var(--beos-border-light); border-bottom-color:var(--beos-border-light); }
+        #weatherAppWindow .current-weather-section .content-wrapper, #weatherAppWindow .aqi-section-weather .content-wrapper, #weatherAppWindow .weekly-temp-chart-container .content-wrapper { padding:var(--container-padding); }
+        #weatherAppWindow .weekly-temp-chart-container { min-height:300px; display:flex; flex-direction:column; }
+        #weatherAppWindow .weekly-temp-chart-container .content-wrapper { flex-grow:1; position:relative; min-height:250px; }
+        #weatherAppWindow .current-weather-main { display:flex; align-items:center; gap:var(--container-padding); margin-bottom:var(--container-padding); }
+        #weatherAppWindow .current-weather-main .icon { font-size:3.5em; line-height:1; filter:drop-shadow(1px 1px 2px rgba(0,0,0,0.1)); }
+        #weatherAppWindow .current-weather-main .icon.sun { animation:gentleRotateWeather 20s linear infinite; }
+        @keyframes gentleRotateWeather {from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+        #weatherAppWindow .current-weather-main .temp-desc .temp { font-size:2.5em; font-weight:bold; color:var(--beos-text); }
+        #weatherAppWindow .current-weather-main .temp-desc .desc { font-size:1em; color:var(--beos-text); opacity:0.8; text-transform:capitalize; margin-top:calc(var(--container-padding)*.1); }
+        #weatherAppWindow .current-weather-details { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:calc(var(--container-padding)*.5); }
+        #weatherAppWindow .current-weather-details div { color:var(--beos-text); opacity:0.8; font-size:0.9em; background-color:var(--beos-window-bg); padding:calc(var(--container-padding)*.5); border-radius:0; border:1px inset var(--beos-border-dark); }
+        #weatherAppWindow .current-weather-details div strong { color:var(--beos-text); font-weight:bold; opacity:1; }
+        #weatherAppWindow .current-weather-details div::before { content:attr(data-emoji); margin-right:calc(var(--container-padding)*.25); opacity:0.8; font-weight:normal; }
+        #weatherAppWindow .forecast-container-weather { display:flex; flex-direction:column; align-items:stretch; gap:var(--container-padding); width:100%; margin-top:0; }
+        #weatherAppWindow .weather-card { background-color:var(--beos-input-bg); border:1px solid; border-color:var(--beos-border-light) var(--beos-border-dark) var(--beos-border-dark) var(--beos-border-light); border-radius:0; padding:0; box-shadow:1px 1px 0 var(--weather-shadow-color),2px 2px 0 var(--weather-shadow-color); display:flex; flex-direction:column; gap:0; cursor:pointer; width:100%; box-sizing:border-box; }
+        #weatherAppWindow .weather-card:hover { background-color:var(--beos-title-bar); color:var(--beos-tab-text); }
+        :root[data-theme="dark"] #weatherAppWindow .weather-card:hover { color:var(--beos-text); }
+        #weatherAppWindow .card-header { background-color:var(--beos-title-bar); color:var(--beos-tab-text); padding:calc(var(--container-padding)*.25) var(--container-padding); border-bottom:1px solid var(--beos-border-dark); display:flex; flex-direction:column; align-items:center; font-weight:normal; font-size:0.9em; }
+        #weatherAppWindow .card-header .date-wrapper { display:flex; align-items:baseline; gap:calc(var(--container-padding)*.25); }
+        #weatherAppWindow .card-header .month-day { font-size:1.1em; font-weight:bold; }
+        #weatherAppWindow .card-header .day-name { font-size:0.9em; opacity:0.9; }
+        #weatherAppWindow .card-content-wrapper { padding:calc(var(--container-padding)*.5) var(--container-padding); display:flex; flex-direction:column; gap:calc(var(--container-padding)*.5); flex-grow:1; }
+        #weatherAppWindow .card-main-weather { display:flex; align-items:center; justify-content:space-between; gap:var(--container-padding); }
+        #weatherAppWindow .card-main-weather .icon { font-size:2.5em; animation:gentleBobWeather 3s ease-in-out infinite alternate; }
+        @keyframes gentleBobWeather {from{transform:translateY(0);}to{transform:translateY(-3px);}}
+        #weatherAppWindow .card-main-weather .temps { text-align:right; }
+        #weatherAppWindow .card-main-weather .temps .temp-range { font-size:1.1em; display:block; margin-bottom:calc(var(--container-padding)*.1); font-weight:bold; color:var(--beos-text); }
+        #weatherAppWindow .card-main-weather .temps .temp-min { color:var(--weather-accent-color-cold); font-weight:bold; }
+        #weatherAppWindow .card-main-weather .temps .temp-max { color:var(--weather-accent-color-warm); font-weight:bold; }
+        #weatherAppWindow .card-main-weather .weather-description { font-size:0.95em; color:var(--beos-text); opacity:0.8; text-transform:capitalize; margin-top:calc(var(--container-padding)*.1); }
+        #weatherAppWindow .card-details-grid { display:grid; grid-template-columns:1fr 1fr; gap:calc(var(--container-padding)*.5); font-size:0.85em; }
+        #weatherAppWindow .detail-item { background-color:var(--beos-window-bg); padding:calc(var(--container-padding)*.35); border-radius:0; border:1px inset var(--beos-border-dark); color:var(--beos-text); opacity:0.8; display:flex; flex-direction:column; }
+        #weatherAppWindow .detail-item .label { display:block; font-size:0.9em; opacity:0.8; margin-bottom:calc(var(--container-padding)*.1); color:var(--beos-text); }
+        #weatherAppWindow .detail-item .value { font-weight:bold; font-size:1em; color:var(--beos-text); opacity:1; }
+        #weatherAppWindow .detail-item .value .unit { font-size:0.9em; opacity:0.8; margin-left:calc(var(--container-padding)*.25); }
+        #weatherAppWindow .detail-item::before { content:attr(data-emoji); margin-right:calc(var(--container-padding)*.35); font-size:0.9em; align-self:flex-start; }
+        #weatherAppWindow .modal-weather { display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(80,80,80,0.5); opacity:0; transition:opacity .1s ease-out; }
+        :root[data-theme="dark"] #weatherAppWindow .modal-weather { background-color:rgba(30,30,30,0.6); }
+        #weatherAppWindow .modal-weather.active { display:flex; opacity:1; }
+        #weatherAppWindow .modal-content-weather { background-color:var(--beos-input-bg); color:var(--beos-text); margin:auto; padding:0; border:1px solid var(--beos-border-dark); border-top-color:var(--beos-border-light); border-left-color:var(--beos-border-light); border-radius:0; width:90%; max-width:700px; box-shadow:2px 2px 0 var(--weather-shadow-color),3px 3px 0 var(--weather-shadow-color); display:flex; flex-direction:column; max-height:85vh; }
+        #weatherAppWindow .modal-header-weather { background-color:var(--beos-title-bar); color:var(--beos-tab-text); padding:calc(var(--container-padding)*.3) var(--container-padding); border-bottom:1px solid var(--beos-border-dark); display:flex; justify-content:space-between; align-items:center; font-weight:normal; position:relative; flex-shrink:0; }
+        #weatherAppWindow .modal-header-weather h2 { font-size:0.9em; margin:0; padding-left:calc(var(--container-padding)*1.5); font-weight:bold; }
+        #weatherAppWindow .modal-header-weather::before { content:''; position:absolute; left:var(--container-padding); top:50%; transform:translateY(-50%); height:calc(100% - var(--container-padding)*.35); width:calc(var(--container-padding)*1); background-color:var(--beos-title-bar); border:1px solid var(--beos-border-dark); border-right-color:var(--beos-border-light); border-bottom-color:var(--beos-border-light); }
+        #weatherAppWindow .close-button-weather { font-size:0.8em!important; padding:2px 6px!important; }
+        #weatherAppWindow .modal-main-content-wrapper-weather { padding:var(--container-padding); overflow-y:auto; flex-grow:1; display:flex; flex-direction:column; }
+        #weatherAppWindow .hourly-chart-wrapper-weather { height:250px; position:relative; flex-shrink:0; margin-bottom:var(--container-padding); }
+        #weatherAppWindow #hourlyTempChartWeather { max-height:100%; }
+        #weatherAppWindow .hourly-forecast-list-weather { overflow-y:auto; padding-right:calc(var(--container-padding)*.5); flex-grow:1; min-height:150px; }
+        #weatherAppWindow .hourly-item { display:flex; justify-content:space-between; align-items:center; padding:calc(var(--container-padding)*.35) calc(var(--container-padding)*.1); border-bottom:1px dotted var(--beos-border-dark); font-size:0.9em; }
+        #weatherAppWindow .hourly-item:last-child { border-bottom:none; }
+        #weatherAppWindow .hourly-item:hover { background-color:rgba(0,0,0,0.04); }
+        :root[data-theme="dark"] #weatherAppWindow .hourly-item:hover { background-color:rgba(255,255,255,0.04); }
+        #weatherAppWindow .hourly-item .time { font-weight:bold; width:20%; color:var(--beos-text); }
+        #weatherAppWindow .hourly-item .icon { font-size:1.5em; width:15%; text-align:center; }
+        #weatherAppWindow .hourly-item .temp { width:18%; text-align:right; font-weight:bold; color:var(--beos-text); }
+        #weatherAppWindow .hourly-item .precip { width:22%; text-align:right; font-size:0.9em; color:var(--beos-text); opacity:0.8; }
+        #weatherAppWindow .hourly-item .desc { width:25%; text-align:right; font-size:0.85em; color:var(--beos-text); opacity:0.8; text-transform:capitalize; }
+        #weatherAppWindow #weatherErrorEl { font-size:1.1em; text-align:center; margin-top:calc(var(--container-padding)*2); width:100%; color:#b00000; font-weight:bold; }
+        :root[data-theme="dark"] #weatherAppWindow #weatherErrorEl { color:#ff4444; }
+        #weatherAppWindow #weatherErrorEl span::before { content:"⚠️ "; font-size:1.3em; display:inline-block; margin-right:var(--container-padding); }
+        #weatherAppWindow #weatherLoadingSkeletonEl { width:100%; max-width:700px; margin:0 auto; }
+        #weatherAppWindow #lastUpdatedWeather { width:100%; text-align:center; margin-top:var(--container-padding); padding-bottom:var(--container-padding); font-size:0.8em; color:var(--beos-text); opacity:0.7; }
+        #weatherAppWindow .icon.anim-cloud-drift { animation:cloudDriftWeather 6s ease-in-out infinite alternate; }
+        @keyframes cloudDriftWeather {from{transform:translateX(-2px);}to{transform:translateX(2px);}}
+        #weatherAppWindow .icon.anim-rain-drop { animation:rainDropWeather 1.2s ease-in-out infinite; }
+        @keyframes rainDropWeather {0%,100%{opacity:1;transform:translateY(0);}50%{opacity:0.6;transform:translateY(3px);}}
+        #weatherAppWindow .icon.anim-snow-flake { animation:snowTwirlWeather 5s ease-in-out infinite alternate; }
+        @keyframes snowTwirlWeather {from{opacity:0.7;transform:rotate(-7deg);}to{opacity:1;transform:rotate(7deg);}}
+
+    </style>
+</head>
+<body>
+    <div class="beos-menubar-placeholder">
+        <span class="menu-item" id="launchWeatherApp">Weather</span> 
+        <span class="menu-item" id="launchDiaryApp">Journal</span> 
+        <span class="menu-item" id="launchRemoverApp">Text Tool</span> 
+        <span class="menu-item" id="themeToggleGlobal">Theme</span> 
+        <span>Help</span>
+    </div>
+
+    <div class="desktop-wrapper" id="desktopWrapper">
+        <div class="desktop-icons-bar" id="desktopIconsBar">
+            <div class="desktop-icon" data-app="weather">
+                <span class="icon-emoji">🌦️</span>
+                <span class="icon-label">Weather</span>
+            </div>
+            <div class="desktop-icon" data-app="diary">
+                <span class="icon-emoji">📔</span>
+                <span class="icon-label">Journal</span>
+            </div>
+            <div class="desktop-icon" data-app="remover">
+                <span class="icon-emoji">🧹</span>
+                <span class="icon-label">Text Tool</span>
+            </div>
+        </div>
+        <div class="draggable-windows-area" id="draggableWindowsArea">
+            <!-- App Windows will be appended here by JS or already exist if pre-defined -->
+            <div id="diaryAppWindow" class="draggable-beos-window" style="width:700px;height:550px;top:20px;left:20px;display:none;">
+                <div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">📔</span>My Journal</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-window-id="diaryAppWindow"></div></div></div>
+                <div class="beos-window-content-area">
+                    <div class="page-content-wrapper" id="diaryPageContentWrapper">
+                        <div id="calendarWindow" class="draggable-beos-window" style="width:200px;height:230px;top:10px;left:300px;"><div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">📅</span>Calendar</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-subwindow-id="calendarWindow"></div></div></div><div class="beos-window-content-area"><div id="calendarContainer"><div id="calendarHeader"><button id="prevMonthBtn" class="beos-button">&lt;</button><span id="currentMonthYear"></span><button id="nextMonthBtn" class="beos-button">&gt;</button></div><table id="calendarTable"><thead><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr></thead><tbody id="calendarBody"></tbody></table></div></div></div>
+                        <div id="formWindow" class="draggable-beos-window" style="width:280px;height:380px;top:10px;left:10px;"><div class="draggable-title-bar"><span class="title-bar-text" id="formTitle"><span class="title-bar-icon">✏️</span>New Entry</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-subwindow-id="formWindow"></div></div></div><div class="beos-window-content-area"><form id="diaryForm"><input type="hidden" id="editingDiaryIndex" value="-1"><div class="form-group form-group-title"><label for="diaryTitle">Title:</label><input type="text" id="diaryTitle" name="diaryTitle" required></div><div class="form-group form-group-content"><label for="diaryContent">Today's Story:</label><textarea id="diaryContent" name="diaryContent" required placeholder="What special happened today? ✨"></textarea></div><div class="form-buttons"><button type="button" id="cancelEditBtn" class="beos-button" style="display:none;">❌ Cancel</button><button type="submit" id="submitDiaryBtn" class="beos-button">💖 Save!</button></div></form></div></div>
+                        <div id="listWindow" class="draggable-beos-window" style="width:350px;height:280px;top:250px;left:300px;"><div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">📚</span><span id="diaryListTitle">Today's Entries</span></span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-subwindow-id="listWindow"></div></div></div><div class="beos-window-content-area"><div id="diaryEntriesList"></div></div></div>
+                        <div id="backupWindow" class="draggable-beos-window" style="width:150px;height:80px;top:10px;left:520px;"><div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">💾</span>Backup</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-subwindow-id="backupWindow"></div></div></div><div class="beos-window-content-area"><button id="performBackupButton" class="beos-button">Backup TXT</button></div></div>
+                        <div id="clockWindow" class="draggable-beos-window" style="width:150px;height:160px;top:100px;left:520px;"><div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">🕒</span>Clock</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-subwindow-id="clockWindow"></div></div></div><div class="beos-window-content-area"><canvas id="analogClockCanvas"></canvas></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="removerAppWindow" class="draggable-beos-window" style="width:650px;height:400px;top:50px;left:200px;display:none;">
+                <div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">🧹</span>Line Break Remover</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-window-id="removerAppWindow"></div></div></div>
+                <div class="beos-window-content-area">
+                    <div class="app-window-remover">
+                        <header class="title-bar-remover">Hard Return Remover</header>
+                        <main class="content-area-remover">
+                            <section class="column"><div class="column-header"><label for="input-text-area" class="editor-label">Input:</label><div class="editor-controls"><button id="clear-input-button" class="beos-button">Clear</button></div></div><textarea id="input-text-area" placeholder="Enter text here..."></textarea><div id="input-status-bar" class="column-status-bar">Chars: 0 | Words: 0 | Lines: 0</div></section>
+                            <section class="column"><div class="column-header"><label for="output-text-area" class="editor-label">Output:</label><div class="editor-controls"><button id="copy-button" class="beos-button">Copy</button><button id="save-button" class="beos-button">Save</button></div></div><textarea id="output-text-area" readonly placeholder="Processed text will appear here..."></textarea><div id="output-status-bar" class="column-status-bar">Chars: 0 | Words: 0 | Lines: 0</div></section>
+                        </main>
+                    </div>
+                </div>
+            </div>
+
+            <div id="weatherAppWindow" class="draggable-beos-window" style="width:450px;height:600px;top:80px;left:350px;display:none;">
+                <div class="draggable-title-bar"><span class="title-bar-text"><span class="title-bar-icon">🌦️</span>Weather Forecast</span><div class="window-controls"><div class="title-bar-button-pseudo close-btn-symbol" data-window-id="weatherAppWindow"></div></div></div>
+                <div class="beos-window-content-area">
+                    <canvas id="weather-effects-canvas-el"></canvas>
+                    <div id="weatherLoadingSkeletonEl"> <header><div class="skeleton skeleton-text" style="width:40%;height:1.5em;margin:0 auto var(--container-padding)"></div><div class="skeleton skeleton-text" style="width:60%;height:1em;margin:0 auto"></div></header><div class="top-info-grid"><section class="current-weather-section skeleton"><div class="skeleton skeleton-text" style="width:30%;height:1.2em;margin-bottom:var(--container-padding);margin-left:var(--container-padding)"></div><div style="padding:var(--container-padding)"><div class="current-weather-main"><div class="skeleton skeleton-icon" style="width:3em;height:3em"></div><div><div class="skeleton skeleton-text" style="width:80px;height:2.5em"></div><div class="skeleton skeleton-text" style="width:120px;height:1em;margin-top:calc(var(--container-padding)*.5)"></div></div></div><div class="current-weather-details"><div class="skeleton skeleton-text" style="height:2em"></div><div class="skeleton skeleton-text" style="height:2em"></div><div class="skeleton skeleton-text" style="height:2em"></div><div class="skeleton skeleton-text" style="height:2em"></div></div></div></section></div><div class="weekly-temp-chart-container skeleton" style="min-height:280px;margin-bottom:var(--container-padding)"><div class="skeleton skeleton-text" style="width:50%;height:1.2em;margin:var(--container-padding) auto var(--container-padding);margin-left:var(--container-padding)"></div></div><main class="forecast-container-weather skeleton"><div class="weather-card skeleton" style="height:180px"></div><div class="weather-card skeleton" style="height:180px"></div></main></div>
+                    <div class="weather-container-main" id="weatherAppItself" style="display:none;">
+                        <header><h1 id="weatherMainTitle">Today & Weekly Forecast</h1><p id="weatherSubTitle">Detailed weather for Seoul.</p></header>
+                        <div class="top-info-grid">
+                            <section class="current-weather-section"><h2>Current Weather</h2><div class="content-wrapper"><div class="current-weather-main"><span class="icon" id="currentWeatherIcon"></span><div class="temp-desc"><span class="temp" id="currentTemp"></span><span class="desc" id="currentWeatherDesc"></span></div></div><div class="current-weather-details"><div data-emoji="🌡️">Feels like: <strong id="currentApparentTemp"></strong></div><div data-emoji="💧">Humidity: <strong id="currentHumidity"></strong></div><div data-emoji="💨">Wind: <strong id="currentWindSpeed"></strong></div><div data-emoji="🧭">Direction: <strong id="currentWindDir"></strong></div><div data-emoji="☔">Precip (1h): <strong id="currentPrecipitation"></strong></div><div data-emoji="⏰">Time: <strong id="currentTime"></strong></div></div></div></section>
+                            <section class="aqi-section-weather" id="aqiSectionWeather" style="display:none;"><h2>Air Quality (AQI)</h2><div class="content-wrapper"><div class="aqi-details"><div class="aqi-value" id="aqiValueWeather">N/A</div><div class="aqi-level" id="aqiLevelWeather">No data</div><div class="aqi-pollutants"><span>(Loading info...)</span></div></div></div></section>
+                        </div>
+                        <section class="weekly-temp-chart-container"><h2>Weekly High/Low Temps</h2><div class="content-wrapper"><canvas id="weeklyTempChartWeather"></canvas></div></section>
+                        <main class="forecast-container-weather" id="forecastContainerWeather"></main>
+                    </div>
+                    <div id="hourlyModalWeather" class="modal-weather"><div class="modal-content-weather"><div class="modal-header-weather"><h2 id="modalTitleWeather">Hourly Forecast</h2><span class="close-button-weather beos-button" id="closeModalButtonWeather">&times;</span></div><div class="modal-main-content-wrapper-weather"><div class="hourly-chart-wrapper-weather"><canvas id="hourlyTempChartWeather"></canvas></div><div class="hourly-forecast-list-weather" id="hourlyForecastListWeather"></div></div></div></div>
+                    <div id="weatherErrorEl" style="display:none;"><span></span>Failed to load weather data. Please try again later.</div>
+                    <p id="lastUpdatedWeather" class="last-updated-timestamp"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="globalPopupNotification" class="popup-notification"></div>
+
+    <script>
+    // --- GLOBAL DESKTOP MANAGER ---
+    const globalDesktopManager = (() => {
+        const desktopWrapper = document.getElementById('desktopWrapper');
+        const draggableWindowsArea = document.getElementById('draggableWindowsArea'); // New area for windows
+        const themeToggleGlobal = document.getElementById('themeToggleGlobal');
+        let currentTheme = localStorage.getItem('integratedBeOS_Theme_v4') || (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+        let highestZ = 10;
+        const windowRegistry = {};
+        const resizeObs = new ResizeObserver(entries=>{for(let entry of entries){const el=entry.target;if(el.offsetParent===null||!el.id)continue;saveWindowState(el.id,{width:el.style.width,height:el.style.height});const appId=el.id.replace('AppWindow','').toLowerCase();if(windowRegistry[appId]?.instance?.handleResize)windowRegistry[appId].instance.handleResize();}});
+
+        function getWindowStates(){const s=localStorage.getItem('integratedBeOS_WindowStates_v4');return s?JSON.parse(s):{};}
+        function saveWindowState(id,partial){const s=getWindowStates();s[id]={...(s[id]||{}),...partial};localStorage.setItem('integratedBeOS_WindowStates_v4',JSON.stringify(s));}
+        function loadWindowStates(){const states=getWindowStates();let maxZ=highestZ;draggableWindowsArea.querySelectorAll('.draggable-beos-window').forEach(el=>{const state=states[el.id];if(state){el.style.display=state.display==='none'?'none':'flex';if(state.top)el.style.top=state.top;if(state.left)el.style.left=state.left;if(state.width)el.style.width=state.width;if(state.height)el.style.height=state.height;if(state.zIndex){const z=parseInt(state.zIndex,10);el.style.zIndex=z;if(z>maxZ)maxZ=z;}}else if(el.style.display!=='none'){el.style.zIndex=highestZ++;saveWindowState(el.id,{zIndex:el.style.zIndex,display:el.style.display||'flex'});}});highestZ=maxZ;}
+        
+        function makeDraggable(elmnt){
+            if(!elmnt)return;
+            let p1=0,p2=0,p3=0,p4=0;
+            const tb=elmnt.querySelector(".draggable-title-bar");
+            const parent=draggableWindowsArea; // Windows are constrained to this new area
+            const bringToFront=()=>{highestZ++;elmnt.style.zIndex=highestZ;saveWindowState(elmnt.id,{zIndex:highestZ.toString()});};
+            elmnt.onmousedown=bringToFront;
+            if(tb){tb.onmousedown=e=>{e=e||window.event;e.preventDefault();bringToFront();p3=e.clientX;p4=e.clientY;document.onmouseup=closeDrag;document.onmousemove=drag;};}
+            function drag(e){e=e||window.event;e.preventDefault();p1=p3-e.clientX;p2=p4-e.clientY;p3=e.clientX;p4=e.clientY;let nT=elmnt.offsetTop-p2;let nL=elmnt.offsetLeft-p1;if(parent){if(nT<0)nT=0;if(nL<0)nL=0;let mT=parent.clientHeight-elmnt.offsetHeight;let mL=parent.clientWidth-elmnt.offsetWidth;if(nT>(mT<0?0:mT))nT=(mT<0?0:mT);if(nL>(mL<0?0:mL))nL=(mL<0?0:mL);}elmnt.style.top=nT+"px";elmnt.style.left=nL+"px";}
+            function closeDrag(){document.onmouseup=null;document.onmousemove=null;saveWindowState(elmnt.id,{top:elmnt.style.top,left:elmnt.style.left});}
+            resizeObs.observe(elmnt);
+        }
+
+        function applyGlobalTheme(theme,isInitial=false){document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('integratedBeOS_Theme_v4',theme);currentTheme=theme;themeToggleGlobal.textContent=theme==='dark'?'☀️ Light Mode':'🌙 Dark Mode';Object.values(windowRegistry).forEach(app=>{if(app.initialized&&app.instance?.handleThemeChange)app.instance.handleThemeChange(theme,isInitial);});}
+        themeToggleGlobal.addEventListener('click',()=>applyGlobalTheme(currentTheme==='dark'?'light':'dark'));
+
+        function launchApp(appId){const winId=`${appId}AppWindow`;const win=document.getElementById(winId);if(!win)return;if(win.style.display==='none'){win.style.display='flex';highestZ++;win.style.zIndex=highestZ;saveWindowState(winId,{display:win.style.display,zIndex:win.style.zIndex});}else{highestZ++;win.style.zIndex=highestZ;saveWindowState(winId,{zIndex:win.style.zIndex});}
+        if(!windowRegistry[appId]||!windowRegistry[appId].initialized){let inst=null;switch(appId){case'diary':inst=diaryApp;break;case'remover':inst=removerApp;break;case'weather':inst=weatherApp;break;}if(inst&&typeof inst.init==='function'){inst.init(currentTheme);windowRegistry[appId]={initialized:true,instance:inst};}}else if(windowRegistry[appId].instance?.reactivate)windowRegistry[appId].instance.reactivate(currentTheme);}
+        function closeWindow(winId){const win=document.getElementById(winId);if(win){win.style.display='none';saveWindowState(winId,{display:'none'});const appId=winId.replace('AppWindow','').toLowerCase();if(windowRegistry[appId]?.instance?.deactivate)windowRegistry[appId].instance.deactivate();}}
+        
+        applyGlobalTheme(currentTheme,true);loadWindowStates();
+        draggableWindowsArea.querySelectorAll('.draggable-beos-window').forEach(makeDraggable); // Ensure only windows in this area are made draggable
+        
+        document.querySelectorAll('.close-btn-symbol').forEach(btn=>{
+            const windowId = btn.dataset.windowId; // For main app windows
+            const subWindowId = btn.dataset.subwindowId; // For diary's internal windows
+
+            btn.addEventListener('click',e=>{
+                e.stopPropagation();
+                if (windowId) {
+                    closeWindow(windowId);
+                } else if (subWindowId && typeof diaryApp !== 'undefined' && diaryApp.closeSubWindow) {
+                     diaryApp.closeSubWindow(subWindowId);
+                } else { // Fallback for diary sub-windows if data-attribute not set correctly
+                    const subWindow = btn.closest('#diaryPageContentWrapper .draggable-beos-window');
+                    if (subWindow && typeof diaryApp !== 'undefined' && diaryApp.closeSubWindow) {
+                        diaryApp.closeSubWindow(subWindow.id);
+                    }
+                }
+            });
+        });
+        // Menu launchers
+        document.getElementById('launchWeatherApp').addEventListener('click',()=>launchApp('weather'));
+        document.getElementById('launchDiaryApp').addEventListener('click',()=>launchApp('diary'));
+        document.getElementById('launchRemoverApp').addEventListener('click',()=>launchApp('remover'));
+        // Desktop icon launchers
+        document.querySelectorAll('#desktopIconsBar .desktop-icon').forEach(icon => {
+            icon.addEventListener('click', () => launchApp(icon.dataset.app));
+        });
+        
+        return{showGlobalPopup:(msg)=>{const p=document.getElementById('globalPopupNotification');if(p){p.textContent=msg;p.classList.add('show');setTimeout(()=>p.classList.remove('show'),2200);}}};
+    })();
+
+    // --- DIARY APP SCRIPT ---
+    const diaryApp = (() => {
+        let initialized=false;const appWindow=document.getElementById('diaryAppWindow');
+        const diaryForm=appWindow.querySelector('#diaryForm'),diaryEntriesList=appWindow.querySelector('#diaryEntriesList'),diaryTitleInput=appWindow.querySelector('#diaryTitle'),diaryContentInput=appWindow.querySelector('#diaryContent'),performBackupButton=appWindow.querySelector('#performBackupButton'),calendarBody=appWindow.querySelector('#calendarBody'),currentMonthYearSpan=appWindow.querySelector('#currentMonthYear'),prevMonthBtn=appWindow.querySelector('#prevMonthBtn'),nextMonthBtn=appWindow.querySelector('#nextMonthBtn'),editingDiaryIndexInput=appWindow.querySelector('#editingDiaryIndex'),submitDiaryBtn=appWindow.querySelector('#submitDiaryBtn'),cancelEditBtn=appWindow.querySelector('#cancelEditBtn'),formTitle=appWindow.querySelector('#formTitle'),diaryListTitle=appWindow.querySelector('#diaryListTitle');
+        const KEY='beosInt_Diary_v4icon',SUBKEY='beosInt_DiarySubWin_v4icon';let cY,cM,selD,popTO;let hiZ=1;const subWinE={};let clkC,clkCtx,clkR,clkInt;let resObs;
+        function getSubS(){const s=localStorage.getItem(SUBKEY);return s?JSON.parse(s):{};}
+        function saveSubS(id,part){const s=getSubS();s[id]={...(s[id]||{}),...part};localStorage.setItem(SUBKEY,JSON.stringify(s));}
+        function loadSubS(){const states=getSubS();let maxZ=hiZ;Object.keys(subWinE).forEach(id=>{const el=subWinE[id];if(!el)return;const state=states[id];if(!state){ if(el.style.display !== 'none') { el.style.zIndex = hiZ++; saveSubS(id, {zIndex: el.style.zIndex.toString(), display: 'flex'});}} else {el.style.display=state.display==='none'?'none':'flex';if(state.top)el.style.top=state.top;if(state.left)el.style.left=state.left;if(state.width)el.style.width=state.width;if(state.height)el.style.height=state.height;if(state.zIndex){const z=parseInt(state.zIndex,10);el.style.zIndex=z;if(z>maxZ)maxZ=z;}}});hiZ=maxZ;}
+        function makeSubDrag(el){if(!el)return;let p1=0,p2=0,p3=0,p4=0;const tb=el.querySelector(".draggable-title-bar");const par=appWindow.querySelector("#diaryPageContentWrapper");const bringToFront=()=>{hiZ++;el.style.zIndex=hiZ;saveSubS(el.id,{zIndex:hiZ.toString()});};el.onmousedown=bringToFront;if(tb){tb.onmousedown=e=>{e=e||window.event;e.preventDefault();bringToFront();p3=e.clientX;p4=e.clientY;document.onmouseup=closeDrag;document.onmousemove=drag;};}
+        function drag(e){e=e||window.event;e.preventDefault();p1=p3-e.clientX;p2=p4-e.clientY;p3=e.clientX;p4=e.clientY;let nT=el.offsetTop-p2;let nL=el.offsetLeft-p1;if(par){if(nT<0)nT=0;if(nL<0)nL=0;let mT=par.clientHeight-el.offsetHeight;let mL=par.clientWidth-el.offsetWidth;if(nT>(mT<0?0:mT))nT=(mT<0?0:mT);if(nL>(mL<0?0:mL))nL=(mL<0?0:mL);}el.style.top=nT+"px";el.style.left=nL+"px";}
+        function closeDrag(){document.onmouseup=null;document.onmousemove=null;saveSubS(el.id,{top:el.style.top,left:el.style.left});}if(resObs)resObs.observe(el);}
+        function showPop(msg,dur=2200){if(popTO)clearTimeout(popTO);globalDesktopManager.showGlobalPopup(msg);}
+        function getAllE(){return JSON.parse(localStorage.getItem(KEY))||[];} function saveAllE(e){localStorage.setItem(KEY,JSON.stringify(e));}
+        function fmtStore(d){return`${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;}
+        function fmtDisp(ds){if(!ds)return'';const[y,m,d]=ds.split('-');return new Date(y,m-1,d).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',weekday:'long'});}
+        function renderE(df=null){diaryEntriesList.innerHTML='';let allE=getAllE();let dispE;const iconEl=diaryListTitle.parentElement.querySelector('.title-bar-icon');if(df){dispE=allE.filter(e=>e.entryDate===df);if(iconEl)iconEl.textContent='📖';diaryListTitle.textContent=`Entries for ${fmtDisp(df)}`;}else{dispE=allE;if(iconEl)iconEl.textContent='📚';diaryListTitle.textContent=`All My Entries`;}
+        dispE.sort((a,b)=>new Date(b.submissionTime)-new Date(a.submissionTime));dispE.forEach((e,i)=>{const oIdx=allE.findIndex(entry=>entry.submissionTime===e.submissionTime&&entry.title===e.title);addEToDOM(e,oIdx!==-1?oIdx:i);});updateCalHL();}
+        function addEToDOM(e,oIdx){const el=document.createElement('div');el.className='diary-entry';const ti=document.createElement('h3');ti.className='diary-title';ti.textContent=e.title;const da=document.createElement('p');da.className='diary-date-display';let dDisp=fmtDisp(e.entryDate);if(e.submissionTime){dDisp+=` (${new Date(e.submissionTime).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})})`;}da.textContent=`💖 ${dDisp}`;const co=document.createElement('p');co.className='diary-content';co.textContent=e.content;const acD=document.createElement('div');acD.className='diary-actions';const edB=document.createElement('button');edB.className='beos-button';edB.innerHTML='✏️ Edit';edB.onclick=()=>loadEForEdit(oIdx);const deB=document.createElement('button');deB.className='beos-button';deB.innerHTML='🗑️ Delete';deB.style.backgroundColor="#C40000";deB.style.color="white";deB.style.borderColor="#FFBDBD #8B0000 #8B0000 #FFBDBD";deB.onclick=()=>delE(oIdx);acD.appendChild(edB);acD.appendChild(deB);el.appendChild(acD);el.appendChild(ti);el.appendChild(da);el.appendChild(co);diaryEntriesList.appendChild(el);}
+        function loadEForEdit(idx){const allE=getAllE();const etE=allE[idx];if(etE){diaryTitleInput.value=etE.title;diaryContentInput.value=etE.content;editingDiaryIndexInput.value=idx.toString();formTitle.innerHTML='<span class="title-bar-icon">✍️</span>Edit Entry';submitDiaryBtn.innerHTML='💾 Save Changes!';cancelEditBtn.style.display='inline-block';diaryTitleInput.focus();const fW=subWinE.formWindow;if(fW&&fW.onmousedown)fW.onmousedown();}}
+        function resetF(){diaryTitleInput.value='';diaryContentInput.value='';editingDiaryIndexInput.value="-1";formTitle.innerHTML='<span class="title-bar-icon">✏️</span>New Entry';submitDiaryBtn.innerHTML='💖 Save!';cancelEditBtn.style.display='none';}
+        function genCal(y,m){calendarBody.innerHTML='';currentMonthYearSpan.textContent=`${new Date(y,m).toLocaleString('en-US',{month:'long'})} ${y}`;const fDoM=new Date(y,m,1),lDoM=new Date(y,m+1,0);const fDoW=fDoM.getDay(),tDiM=lDoM.getDate();const tFD=fmtStore(new Date());const dDates=new Set(getAllE().map(e=>e.entryDate));let date=1;
+        for(let i=0;i<6;i++){const r=document.createElement('tr');for(let j=0;j<7;j++){const c=document.createElement('td');if(i===0&&j<fDoW||date>tDiM){c.className='other-month';}else{c.textContent=date;const cDS=fmtStore(new Date(y,m,date));c.dataset.date=cDS;if(cDS===tFD)c.className='today';if(dDates.has(cDS))c.classList.add('has-diary');if(cDS===selD)c.classList.add('selected-date');
+        c.onclick=function(){selD=this.dataset.date;appWindow.querySelectorAll('#calendarTable td.selected-date').forEach(td=>td.classList.remove('selected-date'));this.classList.add('selected-date');renderE(selD);const nSDo=new Date(selD);cY=nSDo.getFullYear();cM=nSDo.getMonth();};date++;}r.appendChild(c);}calendarBody.appendChild(r);if(date>tDiM&&calendarBody.children.length>=Math.ceil((fDoW+tDiM)/7))break;}}
+        function updateCalHL(){const dD=new Set(getAllE().map(e=>e.entryDate));appWindow.querySelectorAll('#calendarTable td[data-date]').forEach(c=>{c.classList.toggle('has-diary',dD.has(c.dataset.date));});}
+        function delE(idx){if(!confirm('Really delete? Cannot be undone!'))return;let allE=getAllE();allE.splice(idx,1);saveAllE(allE);renderE(selD);genCal(cY,cM);showPop('🗑️ Entry deleted.');if(editingDiaryIndexInput.value===idx.toString())resetF();}
+        function setupClkC(){clkC=appWindow.querySelector('#analogClockCanvas');if(!clkC)return false;clkCtx=clkC.getContext('2d');if(!clkCtx)return false;const wc=clkC.parentElement;if(!wc)return false;const p=5;const aw=Math.max(0,wc.clientWidth-(p*2));const ah=Math.max(0,wc.clientHeight-(p*2));const sz=Math.max(50,Math.min(aw,ah));clkC.width=sz;clkC.height=sz;clkR=clkC.width/2-5;return clkR>0;}
+        function drawHand(ctx,pos,len,wid,col){ctx.beginPath();ctx.lineWidth=wid;ctx.lineCap="round";ctx.strokeStyle=col;ctx.moveTo(clkC.width/2,clkC.height/2);ctx.lineTo(clkC.width/2+len*Math.cos(pos),clkC.height/2+len*Math.sin(pos));ctx.stroke();}
+        function drawClk(){if(!clkC||!clkCtx){if(!setupClkC())return;}if(!setupClkC())return;const cx=clkC.width/2;const cy=clkC.height/2;const s=getComputedStyle(document.documentElement);clkCtx.clearRect(0,0,clkC.width,clkC.height);
+        clkCtx.beginPath();clkCtx.arc(cx,cy,clkR,0,2*Math.PI);clkCtx.fillStyle=s.getPropertyValue('--beos-input-bg').trim();clkCtx.fill();clkCtx.strokeStyle=s.getPropertyValue('--beos-text').trim();clkCtx.lineWidth=Math.max(1,clkR*0.03);clkCtx.stroke();
+        clkCtx.beginPath();clkCtx.arc(cx,cy,Math.max(1,clkR*0.05),0,2*Math.PI);clkCtx.fillStyle=s.getPropertyValue('--beos-text').trim();clkCtx.fill();
+        for(let i=0;i<12;i++){const ang=(i*30-90)*(Math.PI/180);const x1=cx+(clkR-clkR*0.05)*Math.cos(ang);const y1=cy+(clkR-clkR*0.05)*Math.sin(ang);const x2=cx+(clkR-clkR*0.15)*Math.cos(ang);const y2=cy+(clkR-clkR*0.15)*Math.sin(ang);clkCtx.beginPath();clkCtx.lineWidth=Math.max(1,clkR*0.03);clkCtx.strokeStyle=s.getPropertyValue('--beos-text').trim();clkCtx.moveTo(x1,y1);clkCtx.lineTo(x2,y2);clkCtx.stroke();}
+        for(let i=0;i<60;i++){if(i%5===0)continue;const ang=(i*6-90)*(Math.PI/180);const x1=cx+(clkR-clkR*0.05)*Math.cos(ang);const y1=cy+(clkR-clkR*0.05)*Math.sin(ang);const x2=cx+(clkR-clkR*0.1)*Math.cos(ang);const y2=cy+(clkR-clkR*0.1)*Math.sin(ang);clkCtx.beginPath();clkCtx.lineWidth=Math.max(1,clkR*0.015);clkCtx.strokeStyle=s.getPropertyValue('--beos-border-dark').trim();clkCtx.moveTo(x1,y1);clkCtx.lineTo(x2,y2);clkCtx.stroke();}
+        const now=new Date();const hr=now.getHours();const min=now.getMinutes();let hrAng=((hr%12+min/60)*(360/12)-90)*(Math.PI/180);drawHand(clkCtx,hrAng,clkR*0.5,Math.max(2,clkR*0.08),s.getPropertyValue('--beos-text').trim());let minAng=(min*(360/60)-90)*(Math.PI/180);drawHand(clkCtx,minAng,clkR*0.75,Math.max(2,clkR*0.06),s.getPropertyValue('--beos-text').trim());}
+
+        function closeSubWindow(subWindowId) {
+            const subWindow = subWinE[subWindowId];
+            if (subWindow) {
+                subWindow.style.display = 'none';
+                saveSubS(subWindowId, { display: 'none' });
+            }
+        }
+
+        function init(){if(initialized)return;console.log("📔 Diary Init");const t=new Date();cY=t.getFullYear();cM=t.getMonth();selD=fmtStore(t);
+        subWinE.calendarWindow=appWindow.querySelector("#calendarWindow");subWinE.formWindow=appWindow.querySelector("#formWindow");subWinE.listWindow=appWindow.querySelector("#listWindow");subWinE.backupWindow=appWindow.querySelector("#backupWindow");subWinE.clockWindow=appWindow.querySelector("#clockWindow");
+        resObs=new ResizeObserver(entries=>{for(let e of entries){const el=e.target;if(el.offsetParent===null||!el.id)continue;saveSubS(el.id,{width:el.style.width,height:el.style.height});if(el.id==='clockWindow'){if(!clkC)setupClkC();if(clkC)drawClk();}}});
+        loadSubS();const wrap=appWindow.querySelector("#diaryPageContentWrapper");const bT=10,sp=10;
+        // Default layouts for sub-windows are now set via style attribute in HTML for initial state
+        Object.keys(subWinE).forEach(id=>{const el=subWinE[id];if(!el)return;makeSubDrag(el);});
+
+        let maxZ=0;Object.values(subWinE).forEach(el=>{if(el&&el.style.zIndex){const z=parseInt(el.style.zIndex,10);if(z>maxZ)maxZ=z;}});hiZ=maxZ||1;
+        genCal(cY,cM);renderE(selD);if(subWinE.clockWindow){if(clkInt)clearInterval(clkInt);if(setupClkC())drawClk();clkInt=setInterval(()=>{if(subWinE.clockWindow&&appWindow.style.display!=='none'&&subWinE.clockWindow.offsetParent!==null){if(!clkC)setupClkC();if(clkC)drawClk();}},60000);}
+        cancelEditBtn.addEventListener('click',resetF);
+        diaryForm.addEventListener('submit',function(ev){ev.preventDefault();const tit=diaryTitleInput.value.trim();const con=diaryContentInput.value.trim();const edi=parseInt(editingDiaryIndexInput.value);if(tit===''||con===''){showPop('Title and content required!');return;}
+        let allE=getAllE();const sT=new Date();const eDFS=selD?selD:fmtStore(sT);if(edi>-1&&allE[edi]){allE[edi].title=tit;allE[edi].content=con;allE[edi].lastModifiedTime=sT.toISOString();showPop('✨ Entry updated!');}else{const nE={title:tit,content:con,entryDate:eDFS,submissionTime:sT.toISOString()};allE.push(nE);if(!selD||selD!==eDFS)selD=eDFS;showPop('🎉 Entry saved!');}
+        saveAllE(allE);cY=new Date(eDFS).getFullYear();cM=new Date(eDFS).getMonth();genCal(cY,cM);renderE(selD);resetF();diaryTitleInput.focus();});
+        prevMonthBtn.onclick=()=>{cM--;if(cM<0){cM=11;cY--;}genCal(cY,cM);};nextMonthBtn.onclick=()=>{cM++;if(cM>11){cM=0;cY++;}genCal(cY,cM);};
+        performBackupButton.addEventListener('click',function(){const allE=getAllE();if(allE.length===0){showPop('No entries to backup.');return;}
+        let bTxt="💖 BeOS Diary Backup 🤫\n\n💻 Created: "+new Date().toLocaleString('en-US')+"\n========================================\n\n";allE.sort((a,b)=>new Date(a.submissionTime||a.entryDate)-new Date(b.submissionTime||b.entryDate));
+        allE.forEach((e,i)=>{let efd=fmtDisp(e.entryDate);if(e.submissionTime)efd+=` (${new Date(e.submissionTime).toLocaleTimeString('en-US')})`;bTxt+=`📌 Entry #${i+1}\nር Title: ${e.title}\n📅 Date: ${efd}\n----------------------------------------\n${e.content}\n\n========================================\n\n`;});
+        const blob=new Blob([bTxt],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;const ts=new Date().toISOString().replace(/[-:.]/g,"").slice(0,14);a.download=`BeOS_Diary_Backup_${ts}.txt`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);showPop('💾 Entries backed up!');});
+        // Sub-window close buttons handled by global manager now via data-subwindow-id
+        initialized=true;}
+        function reactivate(){if(clkInt)clearInterval(clkInt);if(subWinE.clockWindow&&appWindow.style.display!=='none'&&subWinE.clockWindow.offsetParent!==null){if(!clkC)setupClkC();if(clkC)drawClk();clkInt=setInterval(()=>{if(subWinE.clockWindow&&appWindow.style.display!=='none'&&subWinE.clockWindow.offsetParent!==null){if(!clkC)setupClkC();if(clkC)drawClk();}},60000);}loadSubS();const t=new Date();cY=t.getFullYear();cM=t.getMonth();selD=fmtStore(t);genCal(cY,cM);renderE(selD);}
+        function deactivate(){if(clkInt)clearInterval(clkInt);}
+        function handleThemeChange(){if(clkC&&clkCtx&&appWindow.style.display!=='none')drawClk();}
+        function handleResize(){if(clkC&&clkCtx&&appWindow.style.display!=='none'){setupClkC();drawClk();}}
+        return{init,initialized:()=>initialized,reactivate,deactivate,handleThemeChange,handleResize, closeSubWindow};
+    })();
+
+    // --- HARD RETURN REMOVER SCRIPT ---
+    const removerApp = (() => {
+        let initialized=false;const appWindow=document.getElementById('removerAppWindow');const UI={};const TO=1500;
+        function normNL(t){return t.replace(/\r\n|\r/g,'\n');} function remSNL(t){const nt=normNL(t);return nt.replace(/(?<!\n)\n(?!\n)/g,'');}
+        function stats(t,el){if(!el)return;const cc=t.length;const w=t.trim().split(/\s+/).filter(wd=>wd.length>0);const wc=(w.length===1&&w[0]==='')?0:w.length;const l=t.split('\n');const lc=t?l.length:(t===''?0:1);el.textContent=`Chars:${cc}|Words:${wc}|Lines:${lc}`;}
+        function updateOut(){const it=UI.inputTextArea.value;const pt=remSNL(it);UI.outputTextArea.value=pt;const hasPT=pt.length>0;UI.copyButton.disabled=!hasPT;UI.saveButton.disabled=!hasPT;stats(it,UI.inputStatusBar);stats(pt,UI.outputStatusBar);}
+        function copyBtnState(b,txt,isDis){b.textContent=txt;b.disabled=isDis;}
+        function doCopy(){const txt=UI.outputTextArea.value;if(!txt)return;navigator.clipboard.writeText(txt).then(()=>{const obt=UI.copyButton.textContent;copyBtnState(UI.copyButton,'Copied!',true);setTimeout(()=>{copyBtnState(UI.copyButton,obt,false);UI.copyButton.disabled=!UI.outputTextArea.value;},TO);}).catch(err=>{console.error('CopyFail',err);globalDesktopManager.showGlobalPopup('Copy failed.');});}
+        function doClear(){UI.inputTextArea.value='';updateOut();UI.inputTextArea.focus();}
+        function doSave(){const txt=UI.outputTextArea.value;if(!txt)return;const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='processed_text.txt';document.body.appendChild(link);link.click();document.body.removeChild(link);URL.revokeObjectURL(url);}
+        function init(){if(initialized)return;console.log("🧹 Remover Init");UI.inputTextArea=appWindow.querySelector('#input-text-area');UI.outputTextArea=appWindow.querySelector('#output-text-area');UI.copyButton=appWindow.querySelector('#copy-button');UI.saveButton=appWindow.querySelector('#save-button');UI.clearInputButton=appWindow.querySelector('#clear-input-button');UI.inputStatusBar=appWindow.querySelector('#input-status-bar');UI.outputStatusBar=appWindow.querySelector('#output-status-bar');
+        if(UI.inputTextArea)UI.inputTextArea.addEventListener('input',updateOut);if(UI.copyButton)UI.copyButton.addEventListener('click',doCopy);if(UI.clearInputButton)UI.clearInputButton.addEventListener('click',doClear);if(UI.saveButton)UI.saveButton.addEventListener('click',doSave);updateOut();initialized=true;}
+        return{init,initialized:()=>initialized};
+    })();
+
+    // --- WEATHER APP SCRIPT ---
+    const weatherApp = (() => {
+        'use strict';let initialized=false;const appWindow=document.getElementById('weatherAppWindow');
+        const CFG={SLAT:37.5665,SLON:126.9780,API:"https://api.open-meteo.com/v1/forecast",PDSNOW:30000,PDRAIN:20000,PMAX:60,MAC:'active',
+        WMO:{0:{d:"Clear sky",i:"☀️",e:null},1:{d:"Mainly clear",i:"🌤️",e:null},2:{d:"Partly cloudy",i:"🌥️",e:null},3:{d:"Overcast",i:"☁️",e:null},45:{d:"Fog",i:"🌫️",e:null},48:{d:"Rime fog",i:"🌫️❄️",e:null},51:{d:"L Drizzle",i:"💧",e:"rain"},53:{d:"M Drizzle",i:"💧",e:"rain"},55:{d:"D Drizzle",i:"💧",e:"rain"},56:{d:"L Fr Drizzle",i:"🥶💧",e:"rain_snow"},57:{d:"D Fr Drizzle",i:"🥶💧",e:"rain_snow"},61:{d:"Slt Rain",i:"🌧️",e:"rain"},63:{d:"Mod Rain",i:"🌧️",e:"rain"},65:{d:"Hvy Rain",i:"🌧️",e:"rain"},66:{d:"L Fr Rain",i:"🥶🌧️",e:"rain_snow"},67:{d:"H Fr Rain",i:"🥶🌧️",e:"rain_snow"},71:{d:"Slt Snow",i:"❄️",e:"snow"},73:{d:"Mod Snow",i:"❄️",e:"snow"},75:{d:"Hvy Snow",i:"❄️",e:"snow"},77:{d:"Sn Grains",i:"❄️",e:"snow"},80:{d:"Slt Shower",i:"🌦️",e:"rain"},81:{d:"Mod Shower",i:"🌦️",e:"rain"},82:{d:"Vio Shower",i:"⛈️",e:"rain"},85:{d:"Slt Sn Shower",i:"🌨️",e:"snow"},86:{d:"Hvy Sn Shower",i:"🌨️",e:"snow"},95:{d:"Thunder",i:"⛈️",e:"rain"},96:{d:"Thunder+Slt Hail",i:"⛈️🧊",e:"rain"},99:{d:"Thunder+Hvy Hail",i:"⛈️🧊",e:"rain"}}};
+        const ICOANIM={'☀️':'sun','☁️':'anim-cloud-drift','🌥️':'anim-cloud-drift','🌤️':'anim-cloud-drift','🌧️':'anim-rain-drop','💧':'anim-rain-drop','🌦️':'anim-rain-drop','⛈️':'anim-rain-drop','❄️':'anim-snow-flake','🌨️':'anim-snow-flake'};
+        const D={};let efxCtx;const ST={hrlyFull:null,wkChart:null,hrlyChart:null,efx:{id:null,pts:[],type:null}};
+        function getWD(wc,isD=true){const d=CFG.WMO[wc];if(d){let i=d.i;if(!isD){if(wc===0)i="🌙";else if(wc===1)i="☁️🌙";}return{description:d.d,icon:i,effect:d.e};}return{description:`Code ${wc}`,icon:"❓",effect:null};}
+        function fmtT(dS,incS=false){if(!dS)return"N/A";try{const d=new Date(dS);const o={hour:'2-digit',minute:'2-digit',hour12:false};if(incS)o.second='2-digit';return d.toLocaleTimeString('en-US',o);}catch(e){return"N/A";}}
+        function degCard(deg){if(typeof deg!=='number'||isNaN(deg))return"N/A";const c=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];return c[Math.round(deg/22.5)%16];}
+        function animIco(el,icoC){if(!el)return;const ca=Array.from(el.classList).filter(cls=>cls.startsWith('anim-'));ca.forEach(cls=>el.classList.remove(cls));for(const k in ICOANIM){if(icoC.includes(k)&&ICOANIM[k]!=='sun'){if((k==='🌦️'&&icoC.includes('⛈️'))||(k==='💧'&&icoC.includes('🌧️')))continue;el.classList.add(ICOANIM[k]);if(ICOANIM[k]!=='anim-cloud-drift')break;}}}
+        function updChartC(cI,nC,cT){if(!cI?.options)return;cI.options.plugins.legend.labels.color=nC.primaryTextColor;const tt=cI.options.plugins.tooltip;tt.backgroundColor=nC.cardBgColor;tt.titleColor=nC.primaryTextColor;tt.bodyColor=nC.primaryTextColor;tt.borderColor=nC.borderColor;Object.values(cI.options.scales).forEach(ax=>{if(ax.ticks)ax.ticks.color=nC.primaryTextColor;if(ax.grid)ax.grid.color=nC.borderColor;if(ax.title?.display)ax.title.color=nC.primaryTextColor;});cI.data.datasets.forEach((ds,idx)=>{let nO;if(cT==='weekly')nO=crtChartDO(idx===0?'weeklyMax':'weeklyMin',nC,cI.ctx,ds.label,ds.data);else if(cT==='hourly')nO=crtChartDO(idx===0?(ds.type==='bar'?'hourlyPrecip':'hourlyTemp'):(ds.type==='bar'?'hourlyPrecip':'hourlyTemp'),nC,cI.ctx,ds.label,ds.data);if(nO)Object.assign(ds,nO);});cI.update();}
+        function getChartC(){const s=getComputedStyle(document.documentElement);return{primaryTextColor:s.getPropertyValue('--beos-text').trim(),borderColor:s.getPropertyValue('--beos-border-dark').trim(),cardBgColor:s.getPropertyValue('--beos-input-bg').trim(),accentColorWarm:s.getPropertyValue('--weather-accent-color-warm').trim(),accentColorCold:s.getPropertyValue('--weather-accent-color-cold').trim(),accentColor:s.getPropertyValue('--beos-title-bar').trim(),fontFamily:s.getPropertyValue('--weather-font-family').trim()};}
+        function getBaseCO(){const c=getChartC();return{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:c.primaryTextColor,font:{size:10,family:c.fontFamily}}},tooltip:{backgroundColor:c.cardBgColor,titleColor:c.primaryTextColor,bodyColor:c.primaryTextColor,borderColor:c.borderColor,borderWidth:1,padding:8,cornerRadius:0,titleFont:{weight:'bold',size:11,family:c.fontFamily},bodyFont:{size:10,family:c.fontFamily}}},interaction:{mode:'index',intersect:false},scales:{x:{ticks:{color:c.primaryTextColor,font:{size:10,family:c.fontFamily}},grid:{display:true,color:c.borderColor,borderDash:[2,2]}},y:{ticks:{color:c.primaryTextColor,font:{size:10,family:c.fontFamily}},grid:{display:true,color:c.borderColor,borderDash:[2,2]}}}};}
+        function crtChartDO(type,colors,ctx,label,data){const bd={label,data,tension:0,fill:false,pointBorderColor:colors.cardBgColor,borderWidth:1.5,pointRadius:2,pointHoverRadius:4};switch(type){case'weeklyMax':return{...bd,borderColor:colors.accentColorWarm,pointBackgroundColor:colors.accentColorWarm,pointHoverBorderColor:colors.accentColorWarm};case'weeklyMin':return{...bd,borderColor:colors.accentColorCold,pointBackgroundColor:colors.accentColorCold,pointHoverBorderColor:colors.accentColorCold};case'hourlyTemp':return{...bd,type:'line',yAxisID:'yTemp',borderColor:colors.accentColorWarm,pointBackgroundColor:colors.accentColorWarm,pointHoverBorderColor:colors.accentColorWarm};case'hourlyPrecip':return{type:'bar',label,data,yAxisID:'yPrecip',backgroundColor:colors.accentColor,borderColor:colors.borderColor,borderWidth:1,barPercentage:0.6,categoryPercentage:0.7};default:return bd;}}
+        function renderSkel(show=true){if(D.loadingSkeleton)D.loadingSkeleton.style.display=show?'block':'none';if(D.appItself)D.appItself.style.display=show?'none':'block';}
+        function renderErr(msg,url=null){if(!D.errorMessage)return;D.errorMessage.style.display='block';let h=`<span></span>${msg}`;if(url){const du=url.length>200?`${url.substring(0,200)}...`:url;h+=`<br><a href="${url}" target="_blank" style="color:var(--weather-accent-color-cold);word-break:break-all;font-size:0.8em;">API: ${du}</a>`;}D.errorMessage.innerHTML=h;}
+        function clearErr(){if(D.errorMessage)D.errorMessage.style.display='none';D.errorMessage.innerHTML='';}
+        function renderCur(cur,hrly,tz){if(!cur)return;const wd=getWD(cur.weathercode,cur.is_day===1);D.currentWeatherIcon.textContent=wd.icon;if(wd.icon==='☀️')D.currentWeatherIcon.classList.add('sun');else D.currentWeatherIcon.classList.remove('sun');animIco(D.currentWeatherIcon,wd.icon);D.currentTemp.innerHTML=`${Math.round(cur.temperature)}&deg;C`;D.currentWeatherDesc.textContent=wd.description;D.currentWindSpeed.innerHTML=`${cur.windspeed?.toFixed(1)??'N/A'} km/h`;D.currentWindDir.textContent=degCard(cur.winddirection);D.currentTime.textContent=`${fmtT(cur.time)} (${tz||'KST'})`;if(hrly?.time?.length>0){const n=new Date(cur.time);const ci=hrly.time.reduce((c,ts,i)=>(Math.abs(new Date(ts)-n)<Math.abs(new Date(hrly.time[c])-n)?i:c),0);D.currentApparentTemp.innerHTML=`${Math.round(hrly.apparent_temperature?.[ci]??'N/A')}&deg;C`;D.currentHumidity.innerHTML=`${hrly.relative_humidity_2m?.[ci]??'N/A'}%`;D.currentPrecipitation.innerHTML=`${hrly.precipitation?.[ci]?.toFixed(1)??'0'} mm`;}else{D.currentApparentTemp.innerHTML='N/A&deg;C';D.currentHumidity.innerHTML='N/A%';D.currentPrecipitation.innerHTML='0 mm';}}
+        function renderWkChart(dData){if(!dData?.time?.length)return;const lbls=dData.time.map(ds=>{const d=new Date(ds);return`${d.getMonth()+1}/${d.getDate()}`;});const cc=getChartC();const bo=getBaseCO();const ctx=D.weeklyTempChartCanvas.getContext('2d');if(ST.wkChart)ST.wkChart.destroy();Chart.defaults.color=cc.primaryTextColor;Chart.defaults.borderColor=cc.borderColor;ST.wkChart=new Chart(ctx,{type:'line',data:{labels:lbls,datasets:[crtChartDO('weeklyMax',cc,ctx,'High',dData.temperature_2m_max),crtChartDO('weeklyMin',cc,ctx,'Low',dData.temperature_2m_min)]},options:{...bo,scales:{y:{...bo.scales.y,beginAtZero:false,ticks:{...bo.scales.y.ticks,callback:v=>`${v}°`}},x:{...bo.scales.x,ticks:{...bo.scales.x.ticks,font:{size:9}}}},plugins:{...bo.plugins,tooltip:{...bo.plugins.tooltip,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y}°C`}}}}});}
+        function crtCardHTML(dData,idx){const dO=new Date(`${dData.time[idx]}T00:00:00`);const td=new Date();td.setHours(0,0,0,0);const tm=new Date(td);tm.setDate(td.getDate()+1);const dnO=dO.toLocaleDateString('en-US',{weekday:'long'});let dnF=`(${dO.toLocaleDateString('en-US',{weekday:'short'})})`;if(dO.getTime()===td.getTime())dnF="(Today)";else if(dO.getTime()===tm.getTime())dnF="(Tomorrow)";const md=dO.toLocaleDateString('en-US',{month:'short',day:'numeric'});const wd=getWD(dData.weather_code[idx],true);const card=document.createElement('div');card.className='weather-card';card.dataset.dateStr=dData.time[idx];card.dataset.dayName=dnO;card.dataset.monthDay=md;card.innerHTML=`<div class="card-header"><div class="date-wrapper"><span class="month-day">${md}</span><span class="day-name">${dnF}</span></div></div><div class="card-content-wrapper"><div class="card-main-weather"><span class="icon">${wd.icon}</span><div class="temps"><div class="temp-range"><span class="temp-min">${Math.round(dData.temperature_2m_min[idx])}&deg;</span>/<span class="temp-max">${Math.round(dData.temperature_2m_max[idx])}&deg;</span></div><div class="weather-description">${wd.description}</div></div></div><div class="card-details-grid"><div class="detail-item"data-emoji="🌡️"><span class="label">Feels like</span><span class="value">${Math.round(dData.apparent_temperature_min[idx])}&deg;/${Math.round(dData.apparent_temperature_max[idx])}&deg;</span></div><div class="detail-item"data-emoji="💧"><span class="label">Precip.</span><span class="value">${dData.precipitation_sum[idx].toFixed(1)}<span class="unit">mm</span>(${dData.precipitation_probability_max[idx]}%)</span></div><div class="detail-item"data-emoji="💨"><span class="label">Wind</span><span class="value">${dData.wind_speed_10m_max[idx].toFixed(1)}<span class="unit">km/h</span>(${degCard(dData.wind_direction_10m_dominant[idx])})</span></div><div class="detail-item"data-emoji="☀️"><span class="label">UV Idx</span><span class="value">${dData.uv_index_max[idx].toFixed(1)}</span></div><div class="detail-item"data-emoji="🌅"><span class="label">Sun</span><span class="value">${fmtT(dData.sunrise[idx])}/${fmtT(dData.sunset[idx])}</span></div><div class="detail-item"data-emoji="⏳"><span class="label">P.Hours</span><span class="value">${dData.precipitation_hours[idx].toFixed(0)}<span class="unit">hrs</span></span></div></div></div>`;const iE=card.querySelector('.card-main-weather .icon');if(iE)animIco(iE,wd.icon);return card;}
+        function renderDailyFC(dData){D.forecastContainer.innerHTML='';if(!dData?.time?.length)return;const fr=document.createDocumentFragment();dData.time.forEach((_,i)=>{try{fr.appendChild(crtCardHTML(dData,i));}catch(e){console.error("ErrCard",i,e);}});D.forecastContainer.appendChild(fr);}
+        function crtHrlyItemHTML(hData,idx){const wd=getWD(hData.weather_code[idx],hData.is_day[idx]===1);return`<div class="hourly-item"><span class="time">${fmtT(hData.time[idx])}</span><span class="icon">${wd.icon}</span><span class="temp">${Math.round(hData.temperature_2m[idx])}&deg;C</span><span class="precip">${hData.precipitation_probability[idx]}%</span><span class="desc">${wd.description}</span></div>`;}
+        function renderHrlyModal(dS,dN,mD){const hfd=ST.hrlyFull;if(!hfd?.time){D.modalTitle.textContent="Error";D.hourlyForecastList.innerHTML="<div class='hourly-item'>No hourly data.</div>";if(ST.hrlyChart){ST.hrlyChart.destroy();ST.hrlyChart=null;}D.hourlyModal.classList.add(CFG.MAC);return;}D.modalTitle.textContent=`${mD}(${dN}) Hourly`;const selD=dS.split('T')[0];const cl=[],ct=[],cpp=[];let ht="";hfd.time.forEach((t,idx)=>{if(t.startsWith(selD)){ht+=crtHrlyItemHTML(hfd,idx);cl.push(new Date(t));ct.push(hfd.temperature_2m[idx]);cpp.push(hfd.precipitation_probability[idx]);}});D.hourlyForecastList.innerHTML=ht;const cc=getChartC();const bo=getBaseCO();const ctx=D.hourlyTempChartCanvas.getContext('2d');if(ST.hrlyChart)ST.hrlyChart.destroy();Chart.defaults.color=cc.primaryTextColor;Chart.defaults.borderColor=cc.borderColor;ST.hrlyChart=new Chart(ctx,{data:{labels:cl,datasets:[crtChartDO('hourlyPrecip',cc,ctx,'Precip.(%)',cpp),crtChartDO('hourlyTemp',cc,ctx,'Temp(°C)',ct)]},options:{...bo,scales:{x:{...bo.scales.x,type:'time',time:{unit:'hour',tooltipFormat:'HH:mm',displayFormats:{hour:'HH'}}},yTemp:{...bo.scales.y,type:'linear',position:'left',title:{display:true,text:'Temp(°C)',color:cc.primaryTextColor,font:{size:10,family:cc.fontFamily}},ticks:{...bo.scales.y.ticks,callback:v=>`${v}°`}},yPrecip:{...bo.scales.y,type:'linear',position:'right',min:0,max:100,title:{display:true,text:'Precip.(%)',color:cc.primaryTextColor,font:{size:10,family:cc.fontFamily}},ticks:{...bo.scales.y.ticks,callback:v=>`${v}%`},grid:{...bo.scales.y.grid,drawOnChartArea:false}}},interaction:{mode:'nearest',axis:'x',intersect:false}}});D.hourlyModal.classList.add(CFG.MAC);}
+        function setupEfxCanvas(){if(!D.weatherEffectsCanvas)return; const contArea = D.weatherEffectsCanvas.closest('.beos-window-content-area'); if(!contArea) return; D.weatherEffectsCanvas.width=contArea.clientWidth;D.weatherEffectsCanvas.height=contArea.clientHeight;}
+        function Particle(eT){this.type=eT;this.x=Math.random()*D.weatherEffectsCanvas.width;if(eT==='snow'){this.y=Math.random()*D.weatherEffectsCanvas.height;this.r=Math.random()*2+1;this.sY=Math.random()*0.5+0.2;this.sX=Math.random()*0.6-0.3;this.o=Math.random()*0.5+0.3;}else if(eT==='rain'){this.y=Math.random()*-D.weatherEffectsCanvas.height;this.l=Math.random()*15+8;this.sY=Math.random()*8+8;this.o=Math.random()*0.3+0.2;}this.setCol();}
+        Particle.prototype.setCol=function(){const s=getComputedStyle(document.documentElement);if(this.type==='snow')this.c=s.getPropertyValue('--weather-snow-color').trim();else if(this.type==='rain')this.c=s.getPropertyValue('--weather-rain-color').trim();};
+        Particle.prototype.draw=function(){efxCtx.beginPath();efxCtx.globalAlpha=this.o;if(this.type==='snow'){efxCtx.fillStyle=this.c;efxCtx.arc(this.x,this.y,this.r,0,Math.PI*2);efxCtx.fill();}else if(this.type==='rain'){efxCtx.strokeStyle=this.c;efxCtx.lineWidth=1.2;efxCtx.moveTo(this.x,this.y);efxCtx.lineTo(this.x,this.y+this.l);efxCtx.stroke();}efxCtx.globalAlpha=1;};
+        Particle.prototype.update=function(){this.y+=this.sY;const cvs=D.weatherEffectsCanvas;if(this.type==='snow'){this.x+=this.sX;if(this.y>cvs.height+this.r){this.y=-this.r;this.x=Math.random()*cvs.width;}if(this.x>cvs.width+this.r||this.x<-this.r){this.x=Math.random()*cvs.width;this.y=-this.r;}}else if(this.type==='rain'){if(this.y>cvs.height){this.y=Math.random()*-30;this.x=Math.random()*cvs.width;}}};
+        function updAllPtclCol(){ST.efx.pts.forEach(p=>p.setCol());}
+        function crtPts(eT){const e=ST.efx;e.pts=[];let numP;const area=D.weatherEffectsCanvas.width*D.weatherEffectsCanvas.height;if(eT==='snow')numP=Math.floor(area/CFG.PDSNOW);else if(eT==='rain'||eT==='rain_snow')numP=Math.floor(area/CFG.PDRAIN);else return;numP=Math.min(numP,CFG.PMAX);for(let i=0;i<numP;i++){let pT=(eT==='rain_snow')?(Math.random()>0.5?'rain':'snow'):eT;e.pts.push(new Particle(pT));}}
+        function animPts(){const e=ST.efx;if(!efxCtx||!D.weatherEffectsCanvas||appWindow.style.display==='none')return;efxCtx.clearRect(0,0,D.weatherEffectsCanvas.width,D.weatherEffectsCanvas.height);e.pts.forEach(p=>{p.update();p.draw();});e.id=requestAnimationFrame(animPts);}
+        function startEfx(eT){const e=ST.efx;if(e.id)cancelAnimationFrame(e.id);e.type=eT;e.pts=[];if(!efxCtx||!D.weatherEffectsCanvas)return;efxCtx.clearRect(0,0,D.weatherEffectsCanvas.width,D.weatherEffectsCanvas.height);if(eT){setupEfxCanvas(); crtPts(eT);if(e.pts.length>0&&appWindow.style.display!=='none')animPts();}}
+        async function fetchWD(){const dP="weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,precipitation_sum,rain_sum,showers_sum,snowfall_sum,precipitation_hours,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,uv_index_max";const hP="temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,weather_code,is_day";const url=`${CFG.API}?latitude=${CFG.SLAT}&longitude=${CFG.SLON}&current_weather=true&daily=${dP}&hourly=${hP}&timezone=Asia/Seoul&forecast_days=7`;try{const r=await fetch(url);if(!r.ok){let ed={m:r.statusText,R:"Unk"};try{ed=await r.json();}catch(e){}throw new Error(`HTTP ${r.status}: ${ed.R||ed.m}`);}const data=await r.json();if(!data?.current_weather||!data?.daily||!data?.hourly)throw new Error("API bad format.");return{data,url};}catch(e){console.error('FetchErr',e);throw{originalError:e,failedUrl:url};}}
+        function procDispWD(wData){ST.hrlyFull=wData.hourly;D.mainTitle.textContent=`Weather - Seoul`;D.subTitle.textContent=`Detailed weather for Seoul.`;renderCur(wData.current_weather,wData.hourly,wData.timezone_abbreviation);renderWkChart(wData.daily);renderDailyFC(wData.daily);const cwd=getWD(wData.current_weather.weathercode,wData.current_weather.is_day===1);startEfx(cwd.effect);const now=new Date();D.lastUpdated.textContent=`Updated: ${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;}
+        async function loadWD(showSkel=true){if(showSkel)renderSkel(true);clearErr();if(D.aqiSection)D.aqiSection.style.display='none';try{const{data,url}=await fetchWD();procDispWD(data);if(showSkel)renderSkel(false);}catch(ei){if(showSkel)renderSkel(false);renderErr(`Load failed: ${ei.originalError.message}`,ei.failedUrl);}}
+        
+        function setupEvtLstnrs(){D.closeModalButton.onclick=()=>D.hourlyModal.classList.remove(CFG.MAC);D.hourlyModal.addEventListener('click',ev=>{if(ev.target===D.hourlyModal)D.hourlyModal.classList.remove(CFG.MAC);});D.forecastContainer.addEventListener('click',ev=>{const card=ev.target.closest('.weather-card');if(card?.dataset.dateStr&&card.dataset.dayName&&card.dataset.monthDay)renderHrlyModal(card.dataset.dateStr,card.dataset.dayName,card.dataset.monthDay);});}
+        function handleThemeChange(theme,isInitial){if(!initialized)return;if(!isInitial&&(appWindow.style.display==='block'||appWindow.style.display==='flex')){const nC=getChartC();if(ST.wkChart)updChartC(ST.wkChart,nC,'weekly');if(ST.hrlyChart)updChartC(ST.hrlyChart,nC,'hourly');if(ST.efx.pts.length>0)updAllPtclCol();} else if (isInitial) { /* Theme is set, charts will pick it up on first draw */ }}
+        function handleResize(){if(appWindow.style.display!=='none'){setupEfxCanvas();if(ST.efx.type)startEfx(ST.efx.type);if(ST.wkChart)ST.wkChart.resize(); if(ST.hrlyChart)ST.hrlyChart.resize();}}
+
+        function init(initialTheme){if(initialized)return;console.log("🌦️ Weather Init");
+        D.appItself=appWindow.querySelector('#weatherAppItself');D.loadingSkeleton=appWindow.querySelector('#weatherLoadingSkeletonEl');D.forecastContainer=appWindow.querySelector('#forecastContainerWeather');D.errorMessage=appWindow.querySelector('#weatherErrorEl');D.weatherEffectsCanvas=appWindow.querySelector('#weather-effects-canvas-el');efxCtx=D.weatherEffectsCanvas?D.weatherEffectsCanvas.getContext('2d'):null;
+        D.hourlyModal=appWindow.querySelector('#hourlyModalWeather');D.closeModalButton=appWindow.querySelector('#closeModalButtonWeather');D.hourlyForecastList=appWindow.querySelector('#hourlyForecastListWeather');D.modalTitle=appWindow.querySelector('#modalTitleWeather');D.aqiSection=appWindow.querySelector('#aqiSectionWeather');D.lastUpdated=appWindow.querySelector('#lastUpdatedWeather');D.mainTitle=appWindow.querySelector('#weatherMainTitle');D.subTitle=appWindow.querySelector('#weatherSubTitle');
+        D.currentWeatherIcon=appWindow.querySelector('#currentWeatherIcon');D.currentTemp=appWindow.querySelector('#currentTemp');D.currentWeatherDesc=appWindow.querySelector('#currentWeatherDesc');D.currentApparentTemp=appWindow.querySelector('#currentApparentTemp');D.currentHumidity=appWindow.querySelector('#currentHumidity');D.currentWindSpeed=appWindow.querySelector('#currentWindSpeed');D.currentWindDir=appWindow.querySelector('#currentWindDir');D.currentPrecipitation=appWindow.querySelector('#currentPrecipitation');D.currentTime=appWindow.querySelector('#currentTime');
+        D.weeklyTempChartCanvas=appWindow.querySelector('#weeklyTempChartWeather');D.hourlyTempChartCanvas=appWindow.querySelector('#hourlyTempChartWeather');
+        D.aqiValue = appWindow.querySelector('#aqiValueWeather'); D.aqiLevel = appWindow.querySelector('#aqiLevelWeather'); 
+        
+        setupEfxCanvas();setupEvtLstnrs();loadWD();initialized=true;}
+        function reactivate(currTheme){handleThemeChange(currTheme, false);setupEfxCanvas();if(ST.efx.type)startEfx(ST.efx.type);}
+        function deactivate(){if(ST.efx.id){cancelAnimationFrame(ST.efx.id);ST.efx.id=null;}if(efxCtx&&D.weatherEffectsCanvas)efxCtx.clearRect(0,0,D.weatherEffectsCanvas.width,D.weatherEffectsCanvas.height);}
+        return{init,initialized:()=>initialized,reactivate,deactivate,handleThemeChange,handleResize};
+    })();
+    </script>
+</body>
+</html>
