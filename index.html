@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeOS Desktop NG</title>
+    <!-- Chart.js CDN for Weather App -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        /* --- Global BeOS Styles --- */
+        :root {
+            --beos-bg-primary: #D4D0C8; /* Desktop BG */
+            --beos-bg-window: #C0C0C0;
+            --beos-bg-widget: #BFBFBF;
+            --beos-bg-widget-active: #A0A0A0;
+            --beos-bg-text-area: #FFFFFF;
+
+            --beos-border-light: #FFFFFF;
+            --beos-border-shadow: #808080;
+
+            --beos-text-primary: #000000;
+            --beos-text-placeholder: #999999;
+            --beos-tab-bg: #FFD700; /* Title bar BG */
+            --beos-tab-text: #000000;
+
+            --beos-scrollbar-track: #CCCCCC;
+            --beos-scrollbar-thumb: #A0A0A0;
+            --beos-scrollbar-thumb-hover: #B0B0B0;
+
+            --font-primary: Lato, '나눔바른고딕', 'NanumBarunGothic', "Tahoma", "Geneva", "Verdana", system-ui, sans-serif;
+            --font-editor: Lato, '나눔바른고딕', 'NanumBarunGothic', "Monaco", "Courier New", monospace;
+
+            --padding-xs: 4px;
+            --padding-s: 5px;
+            --padding-m: 8px;
+            --padding-l: 10px;
+
+            --font-size-s: 13px;
+            --font-size-m: 14px;
+            --font-size-l: 18px;
+
+            --min-button-width: 80px;
+            --scrollbar-width: 16px;
+            --container-padding: 10px;
+            --window-content-base-padding: 8px;
+            --beos-shadow-color: rgba(0, 0, 0, 0.35);
+
+            /* Weather App specific, adapted to BeOS theme */
+            --weather-accent-color-warm: #D9534F;
+            --weather-accent-color-cold: #5BC0DE;
+            --weather-rain-color: var(--weather-accent-color-cold);
+            --weather-snow-color: #E0E0E0;
+            --weather-skeleton-bg: #B0B0B0;
+            --weather-skeleton-shine: rgba(255, 255, 255, 0.15);
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: var(--font-primary);
+            background-color: var(--beos-bg-primary);
+            color: var(--beos-text-primary);
+        }
+
+        .beos-menubar-placeholder {
+            width: 100%; height: 20px; background-color: var(--beos-bg-window);
+            border-bottom: 1px solid var(--beos-border-shadow); flex-shrink: 0;
+            display: flex; align-items: center; padding: 0 8px;
+            font-size: 0.8em; color: var(--beos-text-primary); box-sizing: border-box;
+            user-select: none;
+        }
+        .beos-menubar-placeholder span { margin-right: 15px; cursor: default; }
+
+        .desktop-area {
+            width: 100%;
+            flex-grow: 1;
+            padding: var(--container-padding);
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .desktop-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80px;
+            padding: 10px 5px;
+            margin: 10px;
+            cursor: pointer;
+            text-align: center;
+            user-select: none;
+            float: left;
+            border-radius: 3px;
+        }
+        .desktop-icon:hover {
+            background-color: rgba(0,0,0,0.08);
+        }
+        .desktop-icon .icon-emoji {
+            font-size: 48px;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+        .desktop-icon .icon-label {
+            font-size: 12px;
+            color: var(--beos-text-primary);
+            word-break: break-word;
+        }
+
+        .draggable-beos-window {
+            position: absolute;
+            background-color: var(--beos-bg-window);
+            border: 1px solid;
+            border-color: var(--beos-border-light) var(--beos-border-shadow) var(--beos-border-shadow) var(--beos-border-light);
+            box-shadow: 2px 2px 3px var(--beos-shadow-color);
+            display: none; /* Initially hidden */
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 200px;
+            min-height: 150px;
+            resize: both;
+            border-radius: 0;
+            box-sizing: border-box;
+        }
+
+        .draggable-title-bar {
+            background: linear-gradient(to right, var(--beos-tab-bg) 0%, #FFEEAA 70%, var(--beos-tab-bg) 100%);
+            color: var(--beos-tab-text); padding: 0 6px 0 8px; font-weight: bold;
+            border-bottom: 1px solid var(--beos-border-shadow); display: flex; justify-content: space-between;
+            align-items: center; flex-shrink: 0; font-size: 0.9em; height: 22px; box-sizing: border-box;
+            cursor: move;
+            user-select: none;
+        }
+        .draggable-title-bar > .title-bar-text { flex-grow: 1; display: flex; align-items: center; overflow: hidden; white-space: nowrap;}
+        .title-bar-icon { margin-right: 5px; font-size: 1em; line-height: 1; }
+        .window-controls { display: flex; }
+        .title-bar-button-pseudo {
+            width: 14px; height: 14px; border: 1px solid;
+            border-color: var(--beos-border-light) var(--beos-border-shadow) var(--beos-border-shadow) var(--beos-border-light);
+            background-color: var(--beos-bg-widget); margin-left: 3px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 1px 1px 0px var(--beos-border-shadow);
+            font-size: 8px; font-weight: bold; color: var(--beos-text-primary);
+            cursor: pointer;
+        }
+        .title-bar-button-pseudo:active {
+            border-color: var(--beos-border-shadow) var(--beos-border-light) var(--beos-border-light) var(--beos-border-shadow);
+            box-shadow: inset 1px 1px 0px var(--beos-border-shadow);
+        }
+        .dummy-control-button {
+             width: 14px; height: 14px; border: 1px solid;
+             border-color: var(--beos-border-light) var(--beos-border-shadow) var(--beos-border-shadow) var(--beos-border-light);
+             background-color: var(--beos-bg-widget); margin-left: 3px;
+             box-shadow: 1px 1px 0px var(--beos-border-shadow);
+        }
+
+
+        .beos-window-content-area {
+            padding: var(--window-content-base-padding);
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--beos-bg-window); /* Default */
+            box-sizing: border-box;
+            overflow: auto;
+            min-height: 0;
+        }
+
+        .beos-button {
+            padding: var(--padding-xs) var(--padding-l);
+            min-width: var(--min-button-width);
+            font-family: var(--font-primary);
+            font-size: var(--font-size-s);
+            color: var(--beos-text-primary);
+            background-color: var(--beos-bg-widget);
+            border-top: 1px solid var(--beos-border-light);
+            border-left: 1px solid var(--beos-border-light);
+            border-right: 1px solid var(--beos-border-shadow);
+            border-bottom: 1px solid var(--beos-border-shadow);
+            box-shadow: 1px 1px 0px 0px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            border-radius: 2px;
+            text-shadow: 1px 1px 0 var(--beos-border-light);
+        }
+        .beos-button:hover { background-color: var(--beos-bg-widget-active); }
+        .beos-button:disabled {
+            color: #808080; background-color: #D4D0C8; box-shadow: none;
+            border-color: #A0A0A0; cursor: default; text-shadow: none;
+        }
+        .beos-button:not(:disabled):active {
+            background-color: var(--beos-bg-widget-active);
+            border-top: 1px solid var(--beos-border-shadow);
+            border-left: 1px solid var(--beos-border-shadow);
+            border-right: 1px solid var(--beos-border-light);
+            border-bottom: 1px solid var(--beos-border-light);
+            box-shadow: inset 1px 1px 0px 0px rgba(0, 0, 0, 0.1);
+            padding-top: calc(var(--padding-xs) + 1px);
+            padding-bottom: calc(var(--padding-xs) - 1px);
+            text-shadow: none;
+        }
+
+        /* Scrollbar styles */
+        textarea::-webkit-scrollbar,
+        .beos-window-content-area::-webkit-scrollbar,
+        .weather-app-container::-webkit-scrollbar,
+        .weather-hourly-forecast-list::-webkit-scrollbar {
+            width: var(--scrollbar-width);
+            height: var(--scrollbar-width);
+        }
+        textarea::-webkit-scrollbar-track,
+        .beos-window-content-area::-webkit-scrollbar-track,
+        .weather-app-container::-webkit-scrollbar-track,
+        .weather-hourly-forecast-list::-webkit-scrollbar-track {
+            background-color: var(--beos-scrollbar-track);
+            border-left: 1px solid var(--beos-border-shadow);
+        }
+        textarea::-webkit-scrollbar-thumb,
+        .beos-window-content-area::-webkit-scrollbar-thumb,
+        .weather-app-container::-webkit-scrollbar-thumb,
+        .weather-hourly-forecast-list::-webkit-scrollbar-thumb {
+            background-color: var(--beos-bg-widget);
+            border-top: 1px solid var(--beos-border-light);
+            border-left: 1px solid var(--beos-border-light);
+            border-right: 1px solid var(--beos-border-shadow);
+            border-bottom: 1px solid var(--beos-border-shadow);
+        }
+        textarea::-webkit-scrollbar-thumb:hover,
+        .beos-window-content-area::-webkit-scrollbar-thumb:hover,
+        .weather-app-container::-webkit-scrollbar-thumb:hover,
+        .weather-hourly-forecast-list::-webkit-scrollbar-thumb:hover {
+            background-color: var(--beos-scrollbar-thumb-hover);
+        }
+        textarea::-webkit-scrollbar-button,
+        .beos-window-content-area::-webkit-scrollbar-button,
+        .weather-app-container::-webkit-scrollbar-button,
+        .weather-hourly-forecast-list::-webkit-scrollbar-button {
+            display: block;
+            width: var(--scrollbar-width);
+            height: var(--scrollbar-width);
+            background-color: var(--beos-bg-widget);
+            border-top: 1px solid var(--beos-border-light);
+            border-left: 1px solid var(--beos-border-light);
+            border-right: 1px solid var(--beos-border-shadow);
+            border-bottom: 1px solid var(--beos-border-shadow);
+            background-repeat: no-repeat;
+            background-position: center center;
+        }
+        textarea::-webkit-scrollbar-button:active,
+        .beos-window-content-area::-webkit-scrollbar-button:active,
+        .weather-app-container::-webkit-scrollbar-button:active,
+        .weather-hourly-forecast-list::-webkit-scrollbar-button:active {
+            background-color: var(--beos-bg-widget-active);
+            border-top: 1px solid var(--beos-border-shadow);
+            border-left: 1px solid var(--beos-border-shadow);
+        }
+        textarea::-webkit-scrollbar-button:vertical:decrement,
+        .beos-window-content-area::-webkit-scrollbar-button:vertical:decrement,
+        .weather-app-container::-webkit-scrollbar-button:vertical:decrement,
+        .weather-hourly-forecast-list::-webkit-scrollbar-button:vertical:decrement {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23000000'><polygon points='5,2 2,8 8,8'/></svg>");
+        }
+        textarea::-webkit-scrollbar-button:vertical:increment,
+        .beos-window-content-area::-webkit-scrollbar-button:vertical:increment,
+        .weather-app-container::-webkit-scrollbar-button:vertical:increment,
+        .weather-hourly-forecast-list::-webkit-scrollbar-button:vertical:increment {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23000000'><polygon points='5,8 2,2 8,2'/></svg>");
+        }
+
+
+        /* --- Weather App Styles --- */
+        #weatherAppWindow .beos-window-content-area {
+            padding: 0;
+            background-color: var(--beos-bg-primary);
+            position: relative;
+            overflow: hidden; /* Important: content area itself handles overflow of its children */
+            display: flex; /* Ensure it behaves as a flex container for its children */
+            flex-direction: column; /* Stack canvas and container vertically */
+        }
+        #weatherAppWindow #weather-effects-canvas-app {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; /* Will be sized by JS to parent on display */
+            z-index: 0; pointer-events: none;
+        }
+        #weatherAppWindow .weather-app-container {
+            width: 100%; height: 100%; /* Fill the content area */
+            padding: calc(var(--padding-m) * 1.5);
+            box-sizing: border-box;
+            overflow-y: auto; /* This container scrolls its content */
+            position: relative; /* For z-index context */
+            z-index: 1; /* Above the canvas */
+            display: flex; /* Make it a flex container */
+            flex-direction: column; /* Stack its children */
+        }
+        #weatherAppWindow header { text-align: center; margin-bottom: calc(var(--padding-m) * 2); flex-shrink: 0; }
+        #weatherAppWindow header h1 { font-size: 1.5em; font-weight: bold; color: var(--beos-text-primary); margin-bottom: calc(var(--padding-m) * 0.3); }
+        #weatherAppWindow header p { font-size: 0.9em; color: var(--beos-text-primary); opacity: 0.8; }
+
+        #weatherAppWindow .weather-skeleton { background-color: var(--weather-skeleton-bg); border-radius: 0; position: relative; overflow: hidden; }
+        #weatherAppWindow .weather-skeleton::before {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--weather-skeleton-shine); animation: beosSkeletonPulseWF 1.8s infinite ease-in-out; opacity: 0;
+        }
+        @keyframes beosSkeletonPulseWF { 0%, 100% { opacity: 0; transform: translateX(-100%); } 50% { opacity: 1; transform: translateX(0); } 100% { transform: translateX(100%);} }
+        #weatherAppWindow .weather-skeleton-text { height: 1em; margin-bottom: var(--padding-m); border-radius: 0; }
+        #weatherAppWindow .weather-skeleton-icon { width: 3.5em; height: 3.5em; border-radius: 0; margin: 0 auto; }
+
+        #weatherAppWindow .weather-top-info-grid { display: grid; grid-template-columns: 1fr; gap: var(--padding-m); margin-bottom: calc(var(--padding-m) * 2); flex-shrink: 0; }
+        #weatherAppWindow .weather-current-weather-section,
+        #weatherAppWindow .weather-aqi-section {
+            background-color: var(--beos-bg-window);
+            border: 1px solid var(--beos-border-shadow);
+            border-top: 1px solid var(--beos-border-light); border-left: 1px solid var(--beos-border-light);
+            box-shadow: 1px 1px 0 var(--beos-border-shadow), 2px 2px 0 var(--beos-border-shadow);
+            padding: 0; margin-bottom: var(--padding-m);
+        }
+        #weatherAppWindow .weather-current-weather-section h2,
+        #weatherAppWindow .weather-weekly-temp-chart-container h2 {
+            background-color: var(--beos-tab-bg); color: var(--beos-tab-text);
+            padding: calc(var(--padding-xs) * 1.2) var(--padding-m) calc(var(--padding-xs) * 1.2) calc(var(--padding-m) * 3);
+            margin: 0; border-bottom: 1px solid var(--beos-border-shadow);
+            font-weight: normal; font-size: 0.85em; position: relative;
+            display: flex; align-items: center; justify-content: flex-start; text-align: left;
+        }
+        #weatherAppWindow .weather-current-weather-section h2::before,
+        #weatherAppWindow .weather-weekly-temp-chart-container h2::before {
+            content: ''; position: absolute; left: var(--padding-s); top: 50%;
+            transform: translateY(-50%);
+            height: calc(100% - var(--padding-s) * 0.6); width: calc(var(--padding-m) * 1.2);
+            background-color: var(--beos-tab-bg);
+            border: 1px solid var(--beos-border-shadow);
+            border-right: 1px solid var(--beos-border-light); border-bottom: 1px solid var(--beos-border-light);
+        }
+        #weatherAppWindow .weather-current-weather-section .content-wrapper,
+        #weatherAppWindow .weather-aqi-section .content-wrapper {
+             padding: var(--padding-m);
+        }
+        #weatherAppWindow .weather-current-weather-main { display: flex; align-items: center; gap: var(--padding-m); margin-bottom: var(--padding-m); }
+        #weatherAppWindow .weather-current-weather-main .icon { font-size: 3.5em; line-height: 1; }
+        #weatherAppWindow .weather-current-weather-main .icon.sun { animation: gentleRotateWF 20s linear infinite; }
+        @keyframes gentleRotateWF { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        #weatherAppWindow .weather-current-weather-main .temp-desc .temp { font-size: 2.2em; font-weight: bold; color: var(--beos-text-primary); }
+        #weatherAppWindow .weather-current-weather-main .temp-desc .desc { font-size: 0.9em; color: var(--beos-text-primary); opacity: 0.8; text-transform: capitalize; margin-top: calc(var(--padding-xs) * 0.3); }
+
+        #weatherAppWindow .weather-current-weather-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--padding-xs); }
+        #weatherAppWindow .weather-current-weather-details div {
+            color: var(--beos-text-primary); opacity:0.9; font-size: 0.85em;
+            background-color: var(--beos-bg-primary); padding: var(--padding-xs);
+            border-radius: 0; border: 1px inset var(--beos-border-shadow);
+        }
+        #weatherAppWindow .weather-current-weather-details div strong { color: var(--beos-text-primary); font-weight: bold; }
+        #weatherAppWindow .weather-current-weather-details div::before { margin-right: calc(var(--padding-xs) * 0.3); opacity: 0.8; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(1)::before { content: "🌡️"; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(2)::before { content: "💧"; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(3)::before { content: "💨"; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(4)::before { content: "🧭"; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(5)::before { content: "☔"; }
+        #weatherAppWindow .weather-current-weather-details div:nth-child(6)::before { content: "⏰"; }
+
+        #weatherAppWindow .weather-weekly-temp-chart-container {
+            background-color: var(--beos-bg-window); border: 1px solid var(--beos-border-shadow);
+            border-top: 1px solid var(--beos-border-light); border-left: 1px solid var(--beos-border-light);
+            box-shadow: 1px 1px 0 var(--beos-border-shadow), 2px 2px 0 var(--beos-border-shadow);
+            padding: 0; margin-bottom: calc(var(--padding-m) * 2);
+            display: flex; flex-direction: column; min-height: 300px;  flex-shrink: 0;
+        }
+        #weatherAppWindow .weather-weekly-temp-chart-container .content-wrapper {
+             padding: var(--padding-s); flex-grow: 1; position: relative; min-height: 250px; /* Ensure chart has space */
+             display: flex; /* Allow canvas to grow */
+        }
+        #weatherAppWindow #weatherWeeklyTempChart { max-width: 100%; max-height: 100%;} /* Canvas sizing */
+
+        #weatherAppWindow .weather-forecast-container {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: var(--padding-m); width: 100%; margin-top: 0;  flex-shrink: 0;
+        }
+        #weatherAppWindow .weather-card {
+            background-color: var(--beos-bg-window); border: 1px solid var(--beos-border-shadow);
+            border-top: 1px solid var(--beos-border-light); border-left: 1px solid var(--beos-border-light);
+            padding: 0; box-shadow: 1px 1px 0 var(--beos-border-shadow), 2px 2px 0 var(--beos-border-shadow);
+            display: flex; flex-direction: column; gap: 0; cursor: pointer;
+        }
+        #weatherAppWindow .weather-card:hover { background-color: var(--beos-tab-bg); }
+        #weatherAppWindow .weather-card-header {
+            background-color: var(--beos-tab-bg); color: var(--beos-tab-text);
+            padding: var(--padding-xs) var(--padding-s); border-bottom: 1px solid var(--beos-border-shadow);
+            display: flex; flex-direction: column; align-items: center; font-weight: normal; font-size: 0.85em;
+        }
+        #weatherAppWindow .weather-card-header .date-wrapper { display: flex; align-items: baseline; gap: calc(var(--padding-xs) * 0.3); }
+        #weatherAppWindow .weather-card-header .month-day { font-size: 1em; font-weight: bold; }
+        #weatherAppWindow .weather-card-header .day-name { font-size: 0.85em; opacity:0.8; font-weight: normal; }
+        #weatherAppWindow .weather-card-content-wrapper {
+            padding: var(--padding-xs) var(--padding-s); display: flex; flex-direction: column;
+            gap: var(--padding-xs); flex-grow: 1;
+        }
+        #weatherAppWindow .weather-card-main-weather { display: flex; align-items: center; justify-content: space-between; gap: var(--padding-xs); }
+        #weatherAppWindow .weather-card-main-weather .icon { font-size: 2.5em; animation: gentleBobWF 3s ease-in-out infinite alternate; }
+        @keyframes gentleBobWF { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+        #weatherAppWindow .weather-card-main-weather .temps { text-align: right; }
+        #weatherAppWindow .weather-card-main-weather .temps .temp-range { font-size: 1em; display: block; margin-bottom: calc(var(--padding-xs) * 0.1); font-weight: bold; }
+        #weatherAppWindow .weather-card-main-weather .temps .temp-min { color: var(--weather-accent-color-cold); font-weight: bold; }
+        #weatherAppWindow .weather-card-main-weather .temps .temp-max { color: var(--weather-accent-color-warm); font-weight: bold; }
+        #weatherAppWindow .weather-card-main-weather .weather-description { font-size: 0.85em; opacity:0.8; text-transform: capitalize; margin-top: calc(var(--padding-xs) * 0.1); }
+        #weatherAppWindow .weather-card-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--padding-xs); font-size: 0.8em; }
+        #weatherAppWindow .weather-detail-item {
+            background-color: var(--beos-bg-primary); padding: var(--padding-xs);
+            border: 1px inset var(--beos-border-shadow); opacity:0.9; display:flex; flex-direction: column;
+        }
+        #weatherAppWindow .weather-detail-item .label { display: block; font-size: 0.9em; opacity: 0.8; margin-bottom: calc(var(--padding-xs) * 0.1); }
+        #weatherAppWindow .weather-detail-item .value { font-weight: bold; font-size: 1em; }
+        #weatherAppWindow .weather-detail-item .value .unit { font-size: 0.9em; opacity: 0.8; margin-left: calc(var(--padding-xs) * 0.3); }
+        #weatherAppWindow .weather-detail-item.feels-like::before { content: "🌡️"; margin-right: var(--padding-xs); font-size: 0.9em;}
+        #weatherAppWindow .weather-detail-item.precipitation::before { content: "💧"; margin-right: var(--padding-xs);font-size: 0.9em; }
+        #weatherAppWindow .weather-detail-item.wind::before { content: "💨"; margin-right: var(--padding-xs); font-size: 0.9em;}
+        #weatherAppWindow .weather-detail-item.uv-index::before { content: "☀️"; margin-right: var(--padding-xs); font-size: 0.9em;}
+        #weatherAppWindow .weather-detail-item.sunrise-sunset::before { content: "🌅"; margin-right: var(--padding-xs); font-size: 0.9em;}
+        #weatherAppWindow .weather-detail-item.precipitation-hours::before { content: "⏳"; margin-right: var(--padding-xs); font-size: 0.9em;}
+
+        .weather-modal {
+            display: none; position: fixed; z-index: 10000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(60, 60, 60, 0.65);
+            opacity: 0; transition: opacity 0.15s ease-out;
+        }
+        .weather-modal.active { display: flex; opacity: 1; }
+        .weather-modal-content {
+            background-color: var(--beos-bg-window); color: var(--beos-text-primary);
+            margin: auto; padding: 0;
+            border: 1px solid var(--beos-border-shadow);
+            border-top: 1px solid var(--beos-border-light); border-left: 1px solid var(--beos-border-light);
+            width: 90%; max-width: 600px;
+            box-shadow: 2px 2px 0 var(--beos-border-shadow), 3px 3px 0 var(--beos-border-shadow);
+            display: flex; flex-direction: column;
+        }
+        .weather-modal-header {
+            background-color: var(--beos-tab-bg); color: var(--beos-tab-text);
+            padding: calc(var(--padding-xs) * 1.2) var(--padding-m); border-bottom: 1px solid var(--beos-border-shadow);
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: normal; position: relative; flex-shrink: 0;
+        }
+        .weather-modal-header h2 { font-size: 0.85em; margin: 0; padding-left: calc(var(--padding-m) * 2.2); font-weight: normal; }
+        .weather-modal-header::before {
+            content: ''; position: absolute; left: var(--padding-s); top: 50%; transform: translateY(-50%);
+            height: calc(100% - var(--padding-s) * 0.6); width: calc(var(--padding-m) * 1.2);
+            background-color: var(--beos-tab-bg); border: 1px solid var(--beos-border-shadow);
+            border-right: 1px solid var(--beos-border-light); border-bottom: 1px solid var(--beos-border-light);
+        }
+        .weather-modal-header .weather-close-button {
+            color: var(--beos-text-primary); font-size: 1em; font-weight: normal; cursor: pointer;
+            border: 1px solid var(--beos-border-shadow);
+            border-top-color: var(--beos-border-light); border-left-color: var(--beos-border-light);
+            background: var(--beos-bg-widget); line-height: 1;
+            padding: calc(var(--padding-xs)*0.4) calc(var(--padding-s)*0.8);
+            box-shadow: 1px 1px 0px 0px var(--beos-border-shadow);
+        }
+        .weather-modal-header .weather-close-button:active {
+            transform: translate(1px, 1px); box-shadow: none; background-color: var(--beos-bg-widget-active);
+            border-top-color: var(--beos-border-shadow); border-left-color: var(--beos-border-shadow);
+            border-bottom-color: var(--beos-border-light); border-right-color: var(--beos-border-light);
+        }
+        .weather-modal-main-content-wrapper { padding: var(--padding-s); overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; }
+        .weather-hourly-chart-wrapper { height: 220px; position: relative; flex-shrink: 0; margin-bottom: var(--padding-xs); display:flex;}
+        #weatherHourlyTempChart { max-width: 100%; max-height: 100%;}
+        .weather-hourly-forecast-list { overflow-y: auto; padding-right: var(--padding-xs); flex-grow: 1; min-height: 120px; max-height: 250px; }
+        .weather-hourly-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: var(--padding-xs) calc(var(--padding-xs) * 0.3);
+            border-bottom: 1px dotted var(--beos-border-shadow); font-size: 0.85em;
+        }
+        .weather-hourly-item:last-child { border-bottom: none; }
+        .weather-hourly-item:hover { background-color: rgba(0,0,0,0.04); }
+        .weather-hourly-item .time { font-weight: bold; width: 20%; }
+        .weather-hourly-item .icon { font-size: 1.5em; width: 15%; text-align: center; }
+        .weather-hourly-item .temp { width: 18%; text-align: right; font-weight: bold; }
+        .weather-hourly-item .precip { width: 22%; text-align: right; font-size: 0.85em; opacity:0.8; }
+        .weather-hourly-item .desc { width: 25%; text-align: right; font-size: 0.8em; opacity:0.8; text-transform: capitalize; }
+
+        #weatherAppWindow #weatherError { font-size: 1em; text-align: center; margin-top: calc(var(--padding-m) * 2); width: 100%; color: #a00000; font-weight: bold;}
+        #weatherAppWindow #weatherError span { font-size: 1.2em; display: inline-block; margin-right: var(--padding-s); content: "⚠️ "; }
+        #weatherAppWindow .weather-last-updated-timestamp {
+            width: 100%; text-align: center; margin-top: var(--padding-m);
+            padding-bottom: var(--padding-xs); font-size: 0.8em; opacity: 0.7;  flex-shrink: 0;
+        }
+        #weatherAppWindow .icon.anim-cloud-drift { animation: cloudDriftWF 6s ease-in-out infinite alternate; }
+        @keyframes cloudDriftWF { from { transform: translateX(-2px); } to { transform: translateX(2px); } }
+        #weatherAppWindow .icon.anim-rain-drop { animation: rainDropWF 1.2s ease-in-out infinite; }
+        @keyframes rainDropWF { 0%, 100% { opacity: 1; transform: translateY(0); } 50% { opacity: 0.6; transform: translateY(3px); } }
+        #weatherAppWindow .icon.anim-snow-flake { animation: snowTwirlWF 5s ease-in-out infinite alternate; }
+        @keyframes snowTwirlWF { from { opacity: 0.7; transform: rotate(-7deg); } to { opacity: 1; transform: rotate(7deg); } }
+
+
+        /* --- Diary App Styles --- */
+        #calendarWindow .beos-window-content-area { padding: 5px; background-color: var(--beos-bg-window); overflow-y: auto; }
+        #calendarContainer { text-align: center; font-size: 0.85em; user-select: none; }
+        #calendarHeader { margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        #calendarHeader button.beos-button { padding: 2px 5px; font-size: 0.9em; min-width: auto;}
+        #currentMonthYear { font-weight: bold; }
+        #calendarTable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        #calendarTable th, #calendarTable td { border: 1px solid var(--beos-border-shadow); padding: 3px 0; text-align: center; height: 25px; box-sizing: border-box; }
+        #calendarTable th { background-color: var(--beos-bg-widget); font-weight: normal; }
+        #calendarTable td { cursor: pointer; }
+        #calendarTable td:hover { background-color: var(--beos-bg-widget-active); }
+        #calendarTable td.today { background-color: var(--beos-tab-bg) !important; font-weight: bold; color: var(--beos-tab-text) !important; }
+        #calendarTable td.selected-date { background-color: var(--beos-text-primary) !important; color: var(--beos-border-light) !important; border: 1px solid var(--beos-tab-bg); }
+        #calendarTable td.has-diary { font-weight: bold; position: relative; }
+        #calendarTable td.has-diary::after { content: '●'; font-size: 0.5em; color: var(--beos-tab-bg); position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+        #calendarTable td.other-month { color: #999; }
+
+        #formWindow .beos-window-content-area { padding: 6px; overflow: hidden; background-color: var(--beos-bg-text-area); }
+        #diaryForm { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; }
+        #formWindow .form-group { display: flex; flex-direction: column; }
+        #formWindow .form-group label { display: block; margin-bottom: 2px; font-weight: normal; font-size: 0.8em; color: #333; flex-shrink: 0; }
+        #formWindow .form-group-title { flex-shrink: 0; margin-bottom: 5px; }
+        #formWindow .form-group-content { flex-grow: 1; flex-shrink: 1; flex-basis: 0; min-height: 0; display: flex; flex-direction: column; margin-bottom: 5px; }
+        #formWindow #diaryTitleInput { border: 1px inset var(--beos-border-shadow); padding: 5px; box-sizing: border-box; width: 100%; background-color: var(--beos-bg-text-area); font-size: 0.9em; }
+        #formWindow #diaryContentInput { flex-grow: 1; resize: none; border: 1px inset var(--beos-border-shadow); padding: 5px; font-family: var(--font-editor); font-size: 0.95em; line-height: 1.4; box-sizing: border-box; background-color: var(--beos-bg-text-area); width: 100%; min-height: 40px; }
+        #formWindow .form-buttons { flex-shrink: 0; display: flex; flex-direction: row; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 4px; }
+
+        #listWindow .beos-window-content-area { overflow-y: auto; background-color: var(--beos-bg-window); }
+        #diaryEntriesList { width: 100%; box-sizing: border-box; }
+        .diary-entry { background-color: var(--beos-bg-text-area); border: 1px solid var(--beos-border-shadow); padding: 8px 10px; margin-bottom: 8px; box-shadow: 1px 1px 1px rgba(0,0,0,0.1); border-radius: 0; box-sizing: border-box; width: 100%; }
+        .diary-title { font-size: 1.1em; color: var(--beos-text-primary); margin: 0 0 2px 0; font-weight: bold; }
+        .diary-date-display { font-size: 0.7em; color: #555; margin-bottom: 6px; }
+        .diary-content { line-height: 1.4; white-space: pre-wrap; font-size: 0.9em; font-family: var(--font-editor); word-break: break-word; }
+        .diary-actions { float: right; margin-left: 10px; }
+        .diary-actions .beos-button { margin-left: 5px; padding: 2px 5px; font-size: 0.75em; min-width: auto; }
+        #diaryEntriesList:empty::before { content: "✨ How was your day? Write a secret entry here! ✍️\A Or find entries from other dates in the calendar! 📅"; white-space: pre-line; display: block; text-align: center; padding: 15px; color: #666; font-style: italic; font-size: 0.9em; }
+
+        #backupWindow .beos-window-content-area { display: flex; align-items: center; justify-content: center; padding: 10px; background-color: var(--beos-bg-window); }
+        #performBackupButton { width: 100%; padding: 8px 10px; font-size: 0.9em; }
+
+        #clockWindow .beos-window-content-area {
+            display: flex; align-items: center; justify-content: center;
+            padding: 5px; background-color: var(--beos-bg-window);
+        }
+        #analogClockCanvas {
+            max-width: 100%; max-height: 100%; image-rendering: pixelated; image-rendering: crisp-edges;
+        }
+
+        /* --- Hard Return Remover App Styles (Copied from above) --- */
+        #hrrAppWindow .beos-window-content-area {
+            display: flex; gap: var(--padding-m); overflow: hidden; background-color: var(--beos-bg-window);
+        }
+        #hrrAppWindow .hrr-column { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #hrrAppWindow .hrr-column-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--padding-s); flex-shrink: 0; }
+        #hrrAppWindow .hrr-editor-controls { display: flex; gap: var(--padding-xs); flex-shrink: 0; }
+        #hrrAppWindow .hrr-editor-label { padding-left: 2px; font-size: var(--font-size-s); font-weight: normal; flex-shrink: 0; margin-right: var(--padding-s); }
+        #hrrAppWindow textarea { flex-grow: 1; width: 100%; padding: var(--padding-s); box-sizing: border-box; resize: none; color: var(--beos-text-primary); font-family: var(--font-editor); font-size: var(--font-size-l); line-height: 2; background-color: var(--beos-bg-text-area); border-top: 1px solid var(--beos-border-shadow); border-left: 1px solid var(--beos-border-shadow); border-right: 1px solid var(--beos-border-light); border-bottom: 1px solid var(--beos-border-light); box-shadow: inset 1px 1px 0px 0px rgba(0, 0, 0, 0.1); min-height: 100px; }
+        #hrrAppWindow textarea:focus { outline: 1px solid var(--beos-tab-bg); }
+        #hrrAppWindow textarea::placeholder { color: var(--beos-text-placeholder); }
+        #hrrAppWindow .hrr-column-status-bar { height: 22px; line-height: 22px; padding: 0 var(--padding-m); font-size: calc(var(--font-size-s) - 1px); background-color: var(--beos-bg-widget); border-top: 1px solid var(--beos-border-light); color: var(--beos-text-primary); flex-shrink: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: var(--padding-s); }
+
+
+        .popup-notification {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: var(--beos-bg-window); color: var(--beos-text-primary);
+            padding: 15px 25px; border: 1px solid;
+            border-color: var(--beos-border-light) var(--beos-border-shadow) var(--beos-border-shadow) var(--beos-border-light);
+            box-shadow: 3px 3px 5px var(--beos-shadow-color); font-size: 0.9em;
+            z-index: 20000;
+            opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease, top 0.3s ease;
+            min-width: 200px; text-align: center;
+        }
+        .popup-notification.show { opacity: 1; visibility: visible; top: calc(50% - 20px); }
+
+        .chartjs-tooltip {
+            background: var(--beos-bg-text-area) !important;
+            border: 1px solid var(--beos-border-shadow) !important;
+            color: var(--beos-text-primary) !important;
+            border-radius: 0 !important;
+            box-shadow: 1px 1px 2px rgba(0,0,0,0.2) !important;
+            padding: var(--padding-s) !important;
+            font-family: var(--font-primary) !important;
+            font-size: var(--font-size-s) !important;
+        }
+        .chartjs-tooltip-key {
+            display: inline-block; width: 10px; height: 10px; margin-right: var(--padding-xs);
+            border: 1px solid var(--beos-border-shadow);
+        }
+
+        @media (max-width: 768px) {
+            .desktop-icon { width: 60px; margin: 5px;}
+            .desktop-icon .icon-emoji { font-size: 36px; }
+            .desktop-icon .icon-label { font-size: 10px; }
+
+            #weatherAppWindow .weather-app-container { padding: var(--padding-s); }
+            #weatherAppWindow header h1 { font-size: 1.2em; }
+            #weatherAppWindow .weather-current-weather-main .icon { font-size: 3em; }
+            #weatherAppWindow .weather-current-weather-main .temp-desc .temp { font-size: 1.8em; }
+            #weatherAppWindow .weather-forecast-container { grid-template-columns: 1fr; }
+            .weather-modal-content { width: 95%; max-height: 80vh; }
+            .weather-hourly-chart-wrapper { height: 180px; }
+
+            #hrrAppWindow .beos-window-content-area { flex-direction: column; }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="beos-menubar-placeholder">
+        <span>File</span> <span>Edit</span> <span>View</span> <span>Applications</span> <span>Help</span>
+    </div>
+
+    <div class="desktop-area" id="desktopArea">
+        <!-- Desktop Icons - Order Changed -->
+        <div class="desktop-icon" id="icon-weather" data-app-id="weatherAppWindow">
+            <span class="icon-emoji">🌦️</span>
+            <span class="icon-label">Weather</span>
+        </div>
+        <div class="desktop-icon" id="icon-diary" data-app-id="diaryApp">
+            <span class="icon-emoji">📓</span>
+            <span class="icon-label">My Diary</span>
+        </div>
+        <div class="desktop-icon" id="icon-hrr" data-app-id="hrrAppWindow">
+            <span class="icon-emoji">✂️</span>
+            <span class="icon-label">HR Remover</span>
+        </div>
+
+
+        <!-- Weather App Window -->
+        <div id="weatherAppWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar">
+                <span class="title-bar-text"><span class="title-bar-icon">🌦️</span>BeOS Weather</span>
+                 <div class="window-controls">
+                    <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="weatherAppWindow">X</div>
+                </div>
+            </div>
+            <div class="beos-window-content-area" id="weatherAppContentArea">
+                 <canvas id="weather-effects-canvas-app"></canvas>
+                 <div class="weather-app-container" id="weatherAppContainerInner">
+                    <div id="weatherLoadingSkeleton">
+                        <header>
+                            <div class="weather-skeleton weather-skeleton-text" style="width: 40%; height: 1.5em; margin: 0 auto var(--padding-m);"></div>
+                            <div class="weather-skeleton weather-skeleton-text" style="width: 60%; height: 1em; margin: 0 auto;"></div>
+                        </header>
+                        <div class="weather-top-info-grid">
+                            <section class="weather-current-weather-section weather-skeleton" style="padding:var(--padding-m); min-height: 180px;"></section>
+                        </div>
+                        <div class="weather-weekly-temp-chart-container weather-skeleton" style="min-height: 280px;"></div>
+                        <main class="weather-forecast-container">
+                            <div class="weather-card weather-skeleton" style="height: 200px;"></div> <div class="weather-card weather-skeleton" style="height: 200px;"></div>
+                        </main>
+                    </div>
+                    <div id="weatherAppMainContent" style="display:none;">
+                        <header>
+                            <h1 id="weatherMainTitle">Today & Weekly Weather</h1>
+                            <p id="weatherSubTitle">Detailed weather information.</p>
+                        </header>
+                        <div class="weather-top-info-grid">
+                            <section class="weather-current-weather-section">
+                                <h2>Current Weather</h2>
+                                <div class="content-wrapper">
+                                    <div class="weather-current-weather-main">
+                                        <span class="icon" id="weatherCurrentIcon"></span>
+                                        <div class="temp-desc">
+                                            <span class="temp" id="weatherCurrentTemp"></span>
+                                            <span class="desc" id="weatherCurrentWeatherDesc"></span>
+                                        </div>
+                                    </div>
+                                    <div class="weather-current-weather-details">
+                                        <div>Feels like: <strong id="weatherCurrentApparentTemp"></strong></div>
+                                        <div>Humidity: <strong id="weatherCurrentHumidity"></strong></div>
+                                        <div>Wind: <strong id="weatherCurrentWindSpeed"></strong></div>
+                                        <div>Direction: <strong id="weatherCurrentWindDir"></strong></div>
+                                        <div>Precip (1h): <strong id="weatherCurrentPrecipitation"></strong></div>
+                                        <div>Time: <strong id="weatherCurrentTime"></strong></div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                        <section class="weather-weekly-temp-chart-container">
+                            <h2>Weekly Min/Max Temperatures</h2>
+                            <div class="content-wrapper">
+                                <canvas id="weatherWeeklyTempChart"></canvas>
+                            </div>
+                        </section>
+                        <main class="weather-forecast-container" id="weatherForecastContainer">
+                            <!-- Weather cards are added here -->
+                        </main>
+                    </div>
+                    <div id="weatherError" style="display:none;"><span></span>Failed to load weather data. Please try again later.</div>
+                    <p id="weatherLastUpdated" class="weather-last-updated-timestamp"></p>
+                </div>
+            </div>
+        </div>
+        <div id="weatherHourlyModal" class="weather-modal">
+            <div class="weather-modal-content">
+                <div class="weather-modal-header">
+                    <h2 id="weatherModalTitle">Hourly Forecast</h2>
+                    <span class="weather-close-button" id="weatherCloseModalButton">×</span>
+                </div>
+                <div class="weather-modal-main-content-wrapper">
+                    <div class="weather-hourly-chart-wrapper">
+                         <canvas id="weatherHourlyTempChart"></canvas>
+                    </div>
+                    <div class="weather-hourly-forecast-list" id="weatherHourlyForecastList"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Diary App Windows -->
+        <div id="calendarWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar"> <span class="title-bar-text"><span class="title-bar-icon">📅</span>Calendar</span> <div class="window-controls"> <div class="dummy-control-button"></div> <div class="dummy-control-button"></div> <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="calendarWindow">X</div> </div> </div>
+            <div class="beos-window-content-area"> <div id="calendarContainer"> <div id="calendarHeader"> <button id="prevMonthBtn" class="beos-button"><</button> <span id="currentMonthYear"></span> <button id="nextMonthBtn" class="beos-button">></button> </div> <table id="calendarTable"> <thead><tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr></thead> <tbody id="calendarBody"></tbody> </table> </div> </div>
+        </div>
+        <div id="formWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar"> <span class="title-bar-text" id="formTitle"><span class="title-bar-icon">✏️</span>New Entry</span> <div class="window-controls"> <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="formWindow">X</div> </div> </div>
+            <div class="beos-window-content-area"> <form id="diaryForm"> <input type="hidden" id="editingDiaryIndex" value="-1"> <div class="form-group form-group-title"> <label for="diaryTitleInput">Title:</label> <input type="text" id="diaryTitleInput" name="diaryTitle" required> </div> <div class="form-group form-group-content"> <label for="diaryContentInput">Today's Story:</label> <textarea id="diaryContentInput" name="diaryContent" required placeholder="What special happened today? ✨"></textarea> </div> <div class="form-buttons"> <button type="button" id="cancelEditBtn" class="beos-button" style="display:none;">❌ Cancel</button> <button type="submit" id="submitDiaryBtn" class="beos-button">💖 Save!</button> </div> </form> </div>
+        </div>
+        <div id="listWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar"> <span class="title-bar-text"><span class="title-bar-icon">📚</span><span id="diaryListTitle">Today's Entries</span></span> <div class="window-controls"> <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="listWindow">X</div> </div> </div>
+            <div class="beos-window-content-area"> <div id="diaryEntriesList"></div> </div>
+        </div>
+        <div id="backupWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar"> <span class="title-bar-text"><span class="title-bar-icon">💾</span>Backup Tool</span> <div class="window-controls"> <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="backupWindow">X</div> </div> </div>
+            <div class="beos-window-content-area"> <button id="performBackupButton" class="beos-button">Backup to TXT File</button> </div>
+        </div>
+        <div id="clockWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar">
+                <span class="title-bar-text"><span class="title-bar-icon">🕒</span>Clock</span>
+                <div class="window-controls"> <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="clockWindow">X</div> </div>
+            </div>
+            <div class="beos-window-content-area"> <canvas id="analogClockCanvas"></canvas> </div>
+        </div>
+
+        <!-- Hard Return Remover App Window -->
+        <div id="hrrAppWindow" class="draggable-beos-window">
+            <div class="draggable-title-bar">
+                <span class="title-bar-text"><span class="title-bar-icon">✂️</span>Hard Return Remover</span>
+                <div class="window-controls">
+                    <div class="title-bar-button-pseudo close-btn-pseudo" data-window-id="hrrAppWindow">X</div>
+                </div>
+            </div>
+            <div class="beos-window-content-area">
+                <section class="hrr-column">
+                    <div class="hrr-column-header">
+                        <label for="hrr-input-text-area" class="hrr-editor-label">Input:</label>
+                        <div class="hrr-editor-controls">
+                            <button id="hrr-clear-input-button" class="beos-button">Clear</button>
+                        </div>
+                    </div>
+                    <textarea id="hrr-input-text-area" placeholder="Enter text here..."></textarea>
+                    <div id="hrr-input-status-bar" class="hrr-column-status-bar">Chars: 0 | Words: 0 | Lines: 0</div>
+                </section>
+                <section class="hrr-column">
+                    <div class="hrr-column-header">
+                        <label for="hrr-output-text-area" class="hrr-editor-label">Output:</label>
+                        <div class="hrr-editor-controls">
+                            <button id="hrr-copy-button" class="beos-button">Copy</button>
+                            <button id="hrr-save-button" class="beos-button">Save</button>
+                        </div>
+                    </div>
+                    <textarea id="hrr-output-text-area" readonly placeholder="Processed text will appear here..."></textarea>
+                    <div id="hrr-output-status-bar" class="hrr-column-status-bar">Chars: 0 | Words: 0 | Lines: 0</div>
+                </section>
+            </div>
+        </div>
+
+    </div> <!-- /.desktop-area -->
+
+    <div id="popupNotificationGlobal" class="popup-notification"></div>
+
+    <script>
+    // --- Global Desktop Manager JS ---
+    const globalDesktop = {
+        appWindows: {},
+        appStatus: {},
+        highestZ: 1,
+        popupTimeout: null,
+        WINDOW_STATES_KEY: 'beosDesktopWindowStates_v3', // Incremented version
+        resizeObserver: null,
+
+        init() {
+            // Group app windows
+            this.appWindows.weatherAppWindow = document.getElementById("weatherAppWindow");
+            this.appWindows.diaryApp = [
+                document.getElementById("calendarWindow"), document.getElementById("formWindow"),
+                document.getElementById("listWindow"), document.getElementById("backupWindow"),
+                document.getElementById("clockWindow")
+            ];
+            this.appWindows.hrrAppWindow = document.getElementById("hrrAppWindow");
+
+
+            this.loadWindowStates();
+            this.setupDesktopIcons();
+            this.setupCloseButtons();
+
+            if (window.ResizeObserver) {
+                this.resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        const windowEl = entry.target;
+                        if (windowEl.offsetParent === null || windowEl.style.display === 'none') continue;
+                        
+                        this.saveWindowState(windowEl.id, {
+                            width: windowEl.style.width,
+                            height: windowEl.style.height
+                        });
+
+                        if (windowEl.id === 'clockWindow' && typeof diaryApp !== 'undefined' && diaryApp.clockCanvas) {
+                            diaryApp.drawClock();
+                        }
+                        if (windowEl.id === 'weatherAppWindow' && typeof weatherApp !== 'undefined') {
+                           if (weatherApp.DOM.weatherEffectsCanvas) {
+                                weatherApp.setupWeatherEffectsCanvas(); // This resizes canvas to parent
+                                if (weatherApp._appState.weatherEffect.currentEffectType) {
+                                   // Restart effect only if canvas size actually changed significantly or first time
+                                   weatherApp.startWeatherEffect(weatherApp._appState.weatherEffect.currentEffectType);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            document.querySelectorAll('.draggable-beos-window').forEach(el => {
+                if (this.resizeObserver) this.resizeObserver.observe(el);
+                this.makeDraggable(el);
+            });
+
+            const savedStates = this.getWindowStates();
+            Object.keys(savedStates).forEach(windowId => {
+                if (savedStates[windowId].visible) {
+                    let appIdToLaunch = null;
+                    if (windowId === "weatherAppWindow") appIdToLaunch = "weatherAppWindow";
+                    else if (["calendarWindow", "formWindow", "listWindow", "backupWindow", "clockWindow"].includes(windowId)) appIdToLaunch = "diaryApp";
+                    else if (windowId === "hrrAppWindow") appIdToLaunch = "hrrAppWindow";
+                    
+                    if (appIdToLaunch) {
+                         // For multi-window apps, ensure the specific window is shown, not just the app "launched"
+                        const targetWindow = document.getElementById(windowId);
+                        if(targetWindow && targetWindow.style.display === 'none') {
+                            targetWindow.style.display = 'flex';
+                            // Don't bring to front here, z-index already loaded
+                        }
+                        if (!this.appStatus[this.getAppKeyForStatus(windowId)]) {
+                            this.launchApp(this.getAppKeyForStatus(windowId), false); // false to not steal focus
+                        }
+                    }
+                }
+            });
+        },
+
+        getAppKeyForStatus(windowId) {
+            if (windowId === "weatherAppWindow") return "weatherAppWindow";
+            if (["calendarWindow", "formWindow", "listWindow", "backupWindow", "clockWindow"].includes(windowId)) return "diaryApp";
+            if (windowId === "hrrAppWindow") return "hrrAppWindow";
+            return null;
+        },
+
+        setupDesktopIcons() {
+            document.querySelectorAll('.desktop-icon').forEach(icon => {
+                icon.addEventListener('click', () => {
+                    const appId = icon.dataset.appId;
+                    this.launchApp(appId);
+                });
+            });
+        },
+        
+        setupCloseButtons() {
+            document.querySelectorAll('.close-btn-pseudo').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const windowId = button.dataset.windowId;
+                    const windowEl = document.getElementById(windowId);
+                    if (windowEl) {
+                        windowEl.style.display = 'none';
+                        this.saveWindowState(windowId, { visible: false });
+                        // For single window apps, we can reset their "initialized" status if desired
+                        // For multi-window apps like diary, it's usually better to keep them initialized
+                        // as closing one window doesn't mean closing the app.
+                        const appKey = this.getAppKeyForStatus(windowId);
+                        if (appKey && (appKey === "hrrAppWindow" || appKey === "weatherAppWindow")) {
+                             // Check if ALL windows of this app are now closed
+                            let allClosed = true;
+                            const windowsToCheck = this.appWindows[appKey];
+                            if (Array.isArray(windowsToCheck)) { // Should not happen for HRR/Weather
+                                // allClosed = windowsToCheck.every(win => win.style.display === 'none');
+                            } else if (windowsToCheck) {
+                                allClosed = windowsToCheck.style.display === 'none';
+                            }
+                            if (allClosed) {
+                                this.appStatus[appKey] = false; // Allow re-initialization
+                            }
+                        }
+                    }
+                });
+            });
+        },
+
+        launchApp(appIdOrKey, bringToFrontOnClick = true) {
+            let windowsToManage = [];
+            let appKeyForStatus = appIdOrKey;
+            let initFunction = null;
+
+            if (appIdOrKey === 'weatherAppWindow') {
+                windowsToManage.push(this.appWindows.weatherAppWindow);
+                initFunction = weatherApp.init.bind(weatherApp);
+            } else if (appIdOrKey === 'diaryApp') {
+                windowsToManage = this.appWindows.diaryApp;
+                appKeyForStatus = 'diaryApp';
+                initFunction = diaryApp.init.bind(diaryApp);
+            } else if (appIdOrKey === 'hrrAppWindow') {
+                windowsToManage.push(this.appWindows.hrrAppWindow);
+                initFunction = hrrApp.init.bind(hrrApp);
+            }
+
+            let wasAnyWindowNewlyShown = false;
+            windowsToManage.forEach(winEl => {
+                if (winEl) {
+                    if (winEl.style.display === 'none') {
+                        winEl.style.display = 'flex';
+                        wasAnyWindowNewlyShown = true;
+                        // Call app-specific onShow logic if needed AFTER display is set
+                        if (winEl.id === 'weatherAppWindow' && typeof weatherApp !== 'undefined') {
+                            weatherApp.setupWeatherEffectsCanvas(); // Crucial for canvas sizing
+                            if (weatherApp._appState.weatherEffect.currentEffectType) {
+                               weatherApp.startWeatherEffect(weatherApp._appState.weatherEffect.currentEffectType);
+                            }
+                        }
+                         if (winEl.id === 'clockWindow' && typeof diaryApp !== 'undefined') {
+                            diaryApp.setupClockCanvas(); // Ensure canvas is setup
+                            diaryApp.drawClock();
+                        }
+                    }
+                    if (bringToFrontOnClick) {
+                        this.bringToFront(winEl);
+                    }
+                    this.saveWindowState(winEl.id, { visible: true, zIndex: winEl.style.zIndex });
+                }
+            });
+            
+            if (initFunction && (!this.appStatus[appKeyForStatus])) { // Initialize only if not already done
+                initFunction();
+                this.appStatus[appKeyForStatus] = true;
+            }
+        },
+
+        bringToFront(elmnt) {
+            if (!elmnt) return;
+            this.highestZ++;
+            elmnt.style.zIndex = this.highestZ;
+            this.saveWindowState(elmnt.id, { zIndex: this.highestZ.toString() });
+        },
+
+        makeDraggable(elmnt) {
+            if (!elmnt) return;
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            const titleBar = elmnt.querySelector(".draggable-title-bar");
+            const parentContainer = document.getElementById("desktopArea");
+
+            const bringToFrontHandler = () => this.bringToFront(elmnt);
+            elmnt.removeEventListener('mousedown', bringToFrontHandler, false); // Remove if previously added
+            elmnt.addEventListener('mousedown', bringToFrontHandler, false);
+
+
+            if (titleBar) { 
+                titleBar.onmousedown = null; // Clear previous
+                titleBar.onmousedown = dragMouseDown.bind(this); 
+            }
+
+            function dragMouseDown(e) {
+                if (e.target.classList.contains('close-btn-pseudo')) return;
+                e = e || window.event; e.preventDefault();
+                pos3 = e.clientX; pos4 = e.clientY;
+                document.onmouseup = closeDragElement.bind(this);
+                document.onmousemove = elementDrag.bind(this);
+            }
+
+            function elementDrag(e) {
+                e = e || window.event; e.preventDefault();
+                pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
+                pos3 = e.clientX; pos4 = e.clientY;
+                let newTop = elmnt.offsetTop - pos2; let newLeft = elmnt.offsetLeft - pos1;
+
+                if (parentContainer) {
+                    if (newTop < 0) newTop = 0; if (newLeft < 0) newLeft = 0;
+                    if (newTop + elmnt.offsetHeight > parentContainer.clientHeight) {
+                        newTop = Math.max(0, parentContainer.clientHeight - elmnt.offsetHeight);
+                    }
+                    if (newLeft + elmnt.offsetWidth > parentContainer.clientWidth) {
+                        newLeft = Math.max(0, parentContainer.clientWidth - elmnt.offsetWidth);
+                    }
+                }
+                elmnt.style.top = newTop + "px"; elmnt.style.left = newLeft + "px";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null; document.onmousemove = null;
+                this.saveWindowState(elmnt.id, { top: elmnt.style.top, left: elmnt.style.left });
+            }
+        },
+        
+        getWindowStates() {
+            const states = localStorage.getItem(this.WINDOW_STATES_KEY);
+            return states ? JSON.parse(states) : {};
+        },
+
+        saveWindowState(windowId, newPartialState) {
+            const states = this.getWindowStates();
+            states[windowId] = { ...(states[windowId] || {}), ...newPartialState };
+            localStorage.setItem(this.WINDOW_STATES_KEY, JSON.stringify(states));
+        },
+
+        loadWindowStates() {
+            const states = this.getWindowStates();
+            let maxZ = 0;
+            const desktop = document.getElementById("desktopArea");
+            const parentWidth = desktop.clientWidth;
+            const parentHeight = desktop.clientHeight;
+
+            const allWindowElements = [
+                this.appWindows.weatherAppWindow,
+                ...(this.appWindows.diaryApp || []),
+                this.appWindows.hrrAppWindow
+            ].filter(Boolean);
+
+            allWindowElements.forEach((el, index) => {
+                if (!el) return;
+                
+                const state = states[el.id];
+                let appliedPosition = false;
+
+                if (state) {
+                    if (state.top && state.left) { el.style.top = state.top; el.style.left = state.left; appliedPosition = true; }
+                    if (state.width) el.style.width = state.width;
+                    if (state.height) el.style.height = state.height;
+                    if (state.zIndex) { const z = parseInt(state.zIndex, 10); el.style.zIndex = z; if (z > maxZ) maxZ = z; }
+                    // Visibility will be handled by auto-launch logic later
+                    // el.style.display = state.visible === false ? 'none' : 'flex';
+                }
+
+                const defaultPos = this.getDefaultPosition(el.id, index);
+                const defaultSize = this.getDefaultSize(el.id);
+
+                if (!appliedPosition) { el.style.top = defaultPos.top; el.style.left = defaultPos.left; }
+                if (!state || !state.width || parseInt(state.width) <=0) el.style.width = defaultSize.width;
+                if (!state || !state.height || parseInt(state.height) <=0) el.style.height = defaultSize.height;
+
+                let currentLeft = parseInt(el.style.left, 10) || defaultPos.leftPx;
+                let currentTop = parseInt(el.style.top, 10) || defaultPos.topPx;
+                let currentWidth = parseInt(el.style.width, 10) || defaultSize.widthPx;
+                let currentHeight = parseInt(el.style.height, 10) || defaultSize.heightPx;
+
+                if (currentLeft + currentWidth > parentWidth) el.style.left = Math.max(0, parentWidth - currentWidth - 10) + 'px';
+                if (currentTop + currentHeight > parentHeight) el.style.top = Math.max(0, parentHeight - currentHeight - 10) + 'px';
+                if (currentLeft < 0) el.style.left = '10px';
+                if (currentTop < 0) el.style.top = '10px';
+
+                // Set initial display to none; auto-launch will make them visible if needed
+                el.style.display = 'none';
+                 if (state && state.visible && (!state.zIndex)) { // If visible from save but no zIndex, assign one
+                    maxZ++; el.style.zIndex = maxZ;
+                 }
+            });
+            this.highestZ = maxZ || 1;
+        },
+        getDefaultPosition(windowId, index) {
+            const stagger = 30; const baseTop = 20; const baseLeft = 20;
+            let topPx = baseTop + index * stagger; let leftPx = baseLeft + index * stagger;
+            const desktop = document.getElementById("desktopArea");
+            const defaultSize = this.getDefaultSize(windowId);
+            if (leftPx + defaultSize.widthPx > desktop.clientWidth) { leftPx = baseLeft; topPx += stagger * 3; }
+            if (topPx + defaultSize.heightPx > desktop.clientHeight) { topPx = baseTop; }
+            return { top: topPx + 'px', left: leftPx + 'px', topPx, leftPx };
+        },
+        getDefaultSize(windowId) {
+            let width = "400px", height = "300px";
+            switch(windowId) {
+                case "weatherAppWindow": width="750px"; height="550px"; break;
+                case "diaryApp": /* This is a conceptual group */ break;
+                case "calendarWindow": width="240px"; height="270px"; break;
+                case "formWindow": width="330px"; height="380px"; break;
+                case "listWindow": width="420px"; height="420px"; break;
+                case "backupWindow": width="200px"; height="100px"; break;
+                case "clockWindow": width="160px"; height="180px"; break;
+                case "hrrAppWindow": width="650px"; height="400px"; break;
+            }
+            return { width, height, widthPx: parseInt(width), heightPx: parseInt(height) };
+        },
+        showPopup(message, duration = 2200) {
+            const popupElement = document.getElementById('popupNotificationGlobal');
+            if (this.popupTimeout) clearTimeout(this.popupTimeout);
+            popupElement.textContent = message; popupElement.classList.add('show');
+            this.popupTimeout = setTimeout(() => { popupElement.classList.remove('show'); }, duration);
+        }
+    };
+
+    // --- App Specific JS Objects (Weather, Diary, HRR) ---
+    // (Their full JS code will be here, encapsulated as before)
+
+    const weatherApp = { /* ... Full Weather App JS as in previous complete response ... */ 
+        CONFIG: { /* ... */ }, ICON_ANIMATION_MAP: { /* ... */ }, DOM: {}, _appState: { /* ... */ }, weatherEffectsCtx: null,
+        init() { /* ... */ }, getWeatherDetails(wmoCode, isDay = true) { /* ... */ }, formatTime(dateString, includeSeconds = false) { /* ... */ }, degreesToCardinal(deg) { /* ... */ }, applySpecificIconAnimation(element, iconChar) { /* ... */ }, getChartColors() { /* ... */ }, getBaseChartOptions() { /* ... */ }, createChartDatasetOptions(type, colors, ctx, label, data) { /* ... */ }, renderSkeleton(show = true) { /* ... */ }, renderError(message, url = null) { /* ... */ }, clearError() { /* ... */ }, renderCurrentWeather(current, hourly, timezone) { /* ... */ }, renderWeeklyTempChart(dailyData) { /* ... */ }, createForecastCardHTML(dayData, index) { /* ... */ }, renderDailyForecasts(dailyData) { /* ... */ }, createHourlyForecastItemHTML(hourlyData, index) { /* ... */ }, renderHourlyDataInModal(dateStr, dayName, monthDay) { /* ... */ },
+        setupWeatherEffectsCanvas() {
+            if (!this.DOM.weatherEffectsCanvas) { console.warn("Weather: Canvas not found for setup."); return; }
+            this.weatherEffectsCtx = this.DOM.weatherEffectsCanvas.getContext('2d');
+            const parent = this.DOM.weatherEffectsCanvas.parentElement; // Should be .beos-window-content-area
+            if (parent && parent.clientWidth > 0 && parent.clientHeight > 0) {
+                this.DOM.weatherEffectsCanvas.width = parent.clientWidth;
+                this.DOM.weatherEffectsCanvas.height = parent.clientHeight;
+            } else { // Fallback if parent isn't ready or sized
+                // console.warn("Weather: Canvas parent not ready or sized, using window default size for canvas.");
+                // const defaultSize = globalDesktop.getDefaultSize("weatherAppWindow");
+                // this.DOM.weatherEffectsCanvas.width = parseInt(defaultSize.width);
+                // this.DOM.weatherEffectsCanvas.height = parseInt(defaultSize.height);
+            }
+        },
+        Particle: function(effectType, canvasRef, colors) { /* ... */ }, drawParticle(p) { /* ... */ }, updateParticle(p) { /* ... */ }, createParticles(effectType) { /* ... */ }, animateParticles() { /* ... */ }, startWeatherEffect(effectType) { /* ... */ }, fetchWeatherData() { /* ... */ }, processAndDisplayWeatherData(weatherData) { /* ... */ }, loadWeatherData(showSkeletonUI = true) { /* ... */ }, setupEventListeners() { /* ... */ }
+    };
+    weatherApp.Particle.prototype.draw = weatherApp.drawParticle; 
+    weatherApp.Particle.prototype.update = weatherApp.updateParticle;
+
+    const diaryApp = { /* ... Full Diary App JS as in previous complete response ... */
+        DOM: {}, DIARY_LOCAL_STORAGE_KEY: 'beosDesktopDiary_v1', currentYear: new Date().getFullYear(), currentMonth: new Date().getMonth(), selectedDate: null, clockCanvas: null, clockCtx: null, clockRadius: null, clockUpdateInterval: null,
+        init() { /* ... */ }, setupEventListeners() { /* ... */ }, getAllDiaryEntries() { /* ... */ }, saveDiaryEntries(entries) { /* ... */ }, formatDateForStorage(dateObj) { /* ... */ }, formatDateForDisplay(dateString) { /* ... */ }, renderDiaryEntries(dateFilter = null) { /* ... */ }, addDiaryEntryToDOM(entry, originalIndex) { /* ... */ }, loadDiaryForEditing(index) { /* ... */ }, resetForm() { /* ... */ }, handleDiarySubmit(event) { /* ... */ }, deleteDiaryEntry(indexToDelete) { /* ... */ }, generateCalendar(year, month) { /* ... */ }, updateCalendarHighlights() { /* ... */ }, performBackup() { /* ... */ }, setupClockCanvas() { /* ... */ }, drawHand(pos, length, width, color) { /* ... */ }, drawClock() { /* ... */ }
+    };
+
+    const hrrApp = { /* ... Full HRR App JS as in previous complete response ... */
+        UI_ELEMENTS: {}, COPY_BUTTON_FEEDBACK_DURATION_MS: 1500,
+        init() { /* ... */ }, normalizeNewlines(text) { /* ... */ }, removeSingleInternalNewlines(text) { /* ... */ }, updateTextStats(text, statusBarElement) { /* ... */ }, updateOutputText() { /* ... */ }, updateCopyButtonState(button, text, isDisabled) { /* ... */ }, handleCopyAction() { /* ... */ }, handleClearInputAction() { /* ... */ }, handleSaveAction() { /* ... */ }
+    };
+
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', () => {
+        globalDesktop.init();
+    });
+    </script>
+</body>
+</html>
